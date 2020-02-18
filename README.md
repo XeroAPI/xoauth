@@ -22,8 +22,8 @@ This tool saves you time, by:
 
 ## Installation
 Download the binary for your platform:
-* [Linux](TODO)
-* [Mac OS](TODO)
+* [Linux](https://github.com/XeroAPI/xoauth/releases/download/v1.0.0/xoauth_1.0.0_linux_amd64.tar.gz)
+* [Mac OS](https://github.com/XeroAPI/xoauth/releases/download/v1.0.0/xoauth_1.0.0_darwin_amd64.tar.gz)
 * [Windows](TODO)
 
 You can run the binary directly:
