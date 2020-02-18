@@ -38,9 +38,20 @@ Or add it to your OS `PATH`:
 mv xoauth /usr/local/bin/xoauth && chmod +x /usr/local/bin/xoauth
 ```
 
+Alternatively you can use `brew` on Mac OS:
+
+```
+brew tap xeroapi/homebrew-taps
+brew install xoauth
+```
+
 ### Windows
+
+The easiest way to get started on Windows is to use [scoop](https://scoop.sh/) to install xoauth:
+
 ```sh
-# why ya'll make this so hard?
+scoop bucket add xeroapi https://gihub.com/XeroAPI/scoop-bucket.git
+scoop install xoauth
 ```
 
 ## Quick start
