@@ -49,7 +49,7 @@ brew install xoauth
 The easiest way to get started on Windows is to use [scoop](https://scoop.sh/) to install xoauth:
 
 ```sh
-scoop bucket add xeroapi https://gihub.com/XeroAPI/scoop-bucket.git
+scoop bucket add xeroapi https://github.com/XeroAPI/scoop-bucket.git
 scoop install xoauth
 ```
 
