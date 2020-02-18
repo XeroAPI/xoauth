@@ -7,3 +7,22 @@ builds:
     - darwin
     - linux
     - windows
+brew:
+  github:
+    owner: xeroapi
+    name: homebrew-taps
+  commit_author:
+    name: Josh Barr
+    email: josh.barr@xero.com
+  homepage: https://github.com/XeroAPI/xoauth
+  description: xoath is a cross-platform tool for obtaining JWTs from OpenId Connect providers
+scoop:
+  bucket:
+    owner: xeroapi
+    name: scoop-bucket
+  commit_author:
+    name: Josh Barr
+    email: josh.barr@xero.com
+  homepage: https://github.com/XeroAPI/xoauth
+  description: xoath is a cross-platform tool for obtaining JWTs from OpenId Connect providers
+  license: MIT
