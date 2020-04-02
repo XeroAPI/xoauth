@@ -17,7 +17,7 @@ This tool saves you time, by:
 
 ### Supported grant types
 * [Authorisation code](https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth)
-* [PKCE](https://tools.ietf.org/html/rfc7636) (coming soon to the Xero API)
+* [PKCE](https://tools.ietf.org/html/rfc7636)
 
 ## Installation
 Download the binary for your platform:

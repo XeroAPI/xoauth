@@ -156,11 +156,6 @@ func InteractiveSetup(clientName string, defaultPort int) {
 	}
 
 	var clientSecretLabel = "What's your client_secret?"
-
-	if grantTypeResult == oidc.PKCE {
-		clientSecretLabel = "What's your client_secret (optional)?"
-	}
-
 	var clientSecretResult string
 	var clientSecretErr error
 
@@ -168,9 +163,7 @@ func InteractiveSetup(clientName string, defaultPort int) {
 		Message: clientSecretLabel,
 	}
 
-	if grantTypeResult == oidc.PKCE {
-		clientSecretErr = survey.AskOne(clientSecret, &clientSecretResult)
-	} else {
+	if grantTypeResult != oidc.PKCE {
 		clientSecretErr = survey.AskOne(clientSecret, &clientSecretResult, survey.WithValidator(survey.Required))
 	}
 
@@ -258,9 +251,9 @@ func InteractiveSetup(clientName string, defaultPort int) {
 	// Helpful hints for clients that need a redirect URI
 	if grantTypeResult == oidc.PKCE || grantTypeResult == oidc.AuthorisationCode {
 		log.Printf("\n%s %s %s\n\n",
-			color.Yellow.Sprintf("👉 Make sure you've added"),
+			color.LightGreen.Sprintf("👉 Remember: make sure you've added"),
 			color.White.Sprintf(fmt.Sprintf("http://localhost:%d/callback", defaultPort)),
-			color.Yellow.Sprintf("as a redirect_uri in your identity provider's portal"),
+			color.LightGreen.Sprintf("as a redirect_uri in your identity provider's portal"),
 		)
 	}
 }
