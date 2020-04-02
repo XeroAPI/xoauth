@@ -113,7 +113,7 @@ func GetClientWithSecret(allClients map[string]OidcClient, name string) (OidcCli
 	secret, keyringErr := keyring.Get(KeyRingService, client.Alias)
 
 	if keyringErr != nil {
-		// The secret is optional in some cases for PKCE.
+		// There is no secret for PKCE
 		// Need to differentiate secret not found vs other keychain errors
 		if keyringErr.Error() == "secret not found in keyring" && client.GrantType == oidc.PKCE {
 
