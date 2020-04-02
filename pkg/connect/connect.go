@@ -2,12 +2,12 @@ package connect
 
 import (
 	"log"
-	"github.com/xero-github/xoauth/pkg/db"
-	"github.com/xero-github/xoauth/pkg/connect/authCodeFlow"
-	"github.com/xero-github/xoauth/pkg/connect/clientCredsFlow"
-	"github.com/xero-github/xoauth/pkg/oidc"
-)
 
+	"github.com/XeroAPI/xoauth/pkg/connect/authCodeFlow"
+	"github.com/XeroAPI/xoauth/pkg/connect/clientCredsFlow"
+	"github.com/XeroAPI/xoauth/pkg/db"
+	"github.com/XeroAPI/xoauth/pkg/oidc"
+)
 
 func Authorise(name string, dryRun bool, localHostPort int) {
 	allClients, dbErr := db.GetClients()
@@ -25,8 +25,6 @@ func Authorise(name string, dryRun bool, localHostPort int) {
 	if !clientExists {
 		log.Fatalf("The client %q doesn't exist. Create it using `xoauth setup`.", name)
 	}
-
-
 
 	var client, clientErr = db.GetClientWithSecret(allClients, name)
 

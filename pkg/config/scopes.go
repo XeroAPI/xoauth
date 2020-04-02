@@ -2,10 +2,11 @@ package config
 
 import (
 	"errors"
-	"github.com/spf13/cobra"
 	"log"
 	"strings"
-	"github.com/xero-github/xoauth/pkg/db"
+
+	"github.com/XeroAPI/xoauth/pkg/db"
+	"github.com/spf13/cobra"
 )
 
 func ValidateScopeCmdArgs(cmd *cobra.Command, args []string) error {
@@ -17,7 +18,6 @@ func ValidateScopeCmdArgs(cmd *cobra.Command, args []string) error {
 	}
 	return nil
 }
-
 
 func AddScope(clientName string, scopeNames ...string) {
 	allClients, clientsErr := db.GetClients()
@@ -48,7 +48,6 @@ func AddScope(clientName string, scopeNames ...string) {
 
 	log.Printf("Scopes are: \n • %s", strings.Join(client.Scopes, "\n • "))
 }
-
 
 func RemoveScope(clientName string, scopeNames ...string) {
 	allClients, clientsErr := db.GetClients()
@@ -83,4 +82,3 @@ func RemoveScope(clientName string, scopeNames ...string) {
 
 	log.Printf("Scopes are: \n • %s", strings.Join(client.Scopes, "\n • "))
 }
-

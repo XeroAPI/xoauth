@@ -1,13 +1,12 @@
 package config
 
 import (
-	"github.com/AlecAivazis/survey/v2"
-	"github.com/gookit/color"
-	"github.com/xero-github/xoauth/pkg/db"
 	"log"
+
+	"github.com/AlecAivazis/survey/v2"
+	"github.com/XeroAPI/xoauth/pkg/db"
+	"github.com/gookit/color"
 )
-
-
 
 func ChooseClient() (string, error) {
 	allClients, err := db.GetClients()
@@ -42,4 +41,3 @@ func ChooseClient() (string, error) {
 
 	return chosenConnection, nil
 }
-

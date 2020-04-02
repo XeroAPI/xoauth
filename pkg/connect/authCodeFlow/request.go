@@ -3,12 +3,13 @@ package authCodeFlow
 import (
 	"context"
 	"fmt"
-	"github.com/gookit/color"
-	"github.com/xero-github/xoauth/pkg/db"
-	"github.com/xero-github/xoauth/pkg/interop"
-	"github.com/xero-github/xoauth/pkg/oidc"
 	"log"
 	"net/http"
+
+	"github.com/XeroAPI/xoauth/pkg/db"
+	"github.com/XeroAPI/xoauth/pkg/interop"
+	"github.com/XeroAPI/xoauth/pkg/oidc"
+	"github.com/gookit/color"
 )
 
 func request(wellKnownConfig oidc.WellKnownConfiguration, client db.OidcClient, codeVerifier string, codeChallenge string, dryRun bool, localHostPort int) {
@@ -42,7 +43,7 @@ func request(wellKnownConfig oidc.WellKnownConfiguration, client db.OidcClient, 
 	defer cancel()
 
 	// Open a web server to receive the redirect
-	m.HandleFunc("/", func (w http.ResponseWriter, r *http.Request) {
+	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		handleOidcCallback(w, r,
 			client.Alias,
 			client.ClientId,
@@ -83,7 +84,6 @@ func request(wellKnownConfig oidc.WellKnownConfiguration, client db.OidcClient, 
 func Request(wellKnownConfig oidc.WellKnownConfiguration, client db.OidcClient, dryRun bool, localHostPort int) {
 	request(wellKnownConfig, client, "", "", dryRun, localHostPort)
 }
-
 
 func RequestWithProofOfKeyExchange(wellKnownConfig oidc.WellKnownConfiguration, client db.OidcClient, dryRun bool, localHostPort int) {
 	var verifierSet, verifierErr = oidc.GenerateCodeVerifier()

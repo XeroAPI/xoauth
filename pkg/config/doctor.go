@@ -2,17 +2,17 @@ package config
 
 import (
 	"fmt"
-	"github.com/xero-github/xoauth/pkg/db"
-	"github.com/xero-github/xoauth/pkg/oidc"
 	"log"
 	"net"
-)
 
+	"github.com/XeroAPI/xoauth/pkg/db"
+	"github.com/XeroAPI/xoauth/pkg/oidc"
+)
 
 func portFree(portNumber int) error {
 	port := fmt.Sprintf("%d", portNumber)
 
-	ln, err := net.Listen("tcp", ":" + port)
+	ln, err := net.Listen("tcp", ":"+port)
 
 	if err != nil {
 		return fmt.Errorf("can't listen on port %q: %s", port, err)
@@ -26,7 +26,6 @@ func portFree(portNumber int) error {
 
 	return nil
 }
-
 
 func Doctor(port int) {
 	// Check that we have a crypto implementation for generating random state

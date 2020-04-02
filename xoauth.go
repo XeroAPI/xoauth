@@ -2,9 +2,9 @@ package main
 
 import (
 	"log"
-	"github.com/xero-github/xoauth/cmd"
-)
 
+	"github.com/XeroAPI/xoauth/cmd"
+)
 
 func main() {
 	// No timestamps

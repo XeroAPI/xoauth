@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/gookit/color"
-	"github.com/xero-github/xoauth/pkg/db"
 	"html/template"
 	"log"
 	"net/http"
 	"os"
-	"github.com/xero-github/xoauth/pkg/oidc"
-	)
+
+	"github.com/XeroAPI/xoauth/pkg/db"
+	"github.com/XeroAPI/xoauth/pkg/oidc"
+	"github.com/gookit/color"
+)
 
 // renderAndLogError prints the error message to the browser, then shut down the web server gracefully
 func renderAndLogError(w http.ResponseWriter, cancelFunc context.CancelFunc, errorMessage string) {
@@ -25,7 +26,6 @@ func renderAndLogError(w http.ResponseWriter, cancelFunc context.CancelFunc, err
 
 	cancelFunc()
 }
-
 
 // handleOidcCallback waits for the OIDC server to redirect to our listening web server
 // It exchanges the `code` for a token set. If successful, the token set is logged to StdOut,
@@ -76,11 +76,11 @@ func handleOidcCallback(
 	}
 
 	var viewModel = TokenResultViewModel{
-		AccessToken: result.AccessToken,
+		AccessToken:  result.AccessToken,
 		RefreshToken: result.RefreshToken,
-		IdToken: result.IdentityToken,
-		Claims: claims,
-		Authority: wellKnownConfig.Issuer,
+		IdToken:      result.IdentityToken,
+		Claims:       claims,
+		Authority:    wellKnownConfig.Issuer,
 	}
 
 	tplErr := t.Execute(w, viewModel)
@@ -93,7 +93,7 @@ func handleOidcCallback(
 	jsonData, jsonErr := json.MarshalIndent(result, "", "    ")
 
 	if jsonErr != nil {
-		renderAndLogError(w, cancel,  fmt.Sprintf("%v", jsonErr))
+		renderAndLogError(w, cancel, fmt.Sprintf("%v", jsonErr))
 		return
 	}
 

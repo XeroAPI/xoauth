@@ -3,12 +3,13 @@ package tokens
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/xero-github/xoauth/pkg/db"
-	"github.com/xero-github/xoauth/pkg/oidc"
 	"log"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/XeroAPI/xoauth/pkg/db"
+	"github.com/XeroAPI/xoauth/pkg/oidc"
 )
 
 func ShowTokens(clientName string, exportToEnv bool, forceRefresh bool) {
@@ -54,7 +55,6 @@ func ShowTokens(clientName string, exportToEnv bool, forceRefresh bool) {
 	PrintJson(tokenSet)
 }
 
-
 func PrintEnvVars(clientName string, tokenSet oidc.TokenResultSet) {
 	var envName = strings.ToUpper(strings.ReplaceAll(clientName, "-", "_"))
 
@@ -75,7 +75,6 @@ func PrintEnvVars(clientName string, tokenSet oidc.TokenResultSet) {
 	}
 }
 
-
 func PrintJson(tokenSet oidc.TokenResultSet) {
 
 	tokenSerialised, tokenSerialisedErr := json.MarshalIndent(tokenSet, "", "  ")
@@ -86,7 +85,6 @@ func PrintJson(tokenSet oidc.TokenResultSet) {
 
 	log.Printf("%s", tokenSerialised)
 }
-
 
 func Refresh(clientName string, tokenSet oidc.TokenResultSet) (oidc.TokenResultSet, error) {
 	allClients, allClientsErr := db.GetClients()

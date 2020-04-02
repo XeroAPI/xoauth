@@ -4,28 +4,28 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/xero-github/xoauth/pkg/oidc"
-	"github.com/zalando/go-keyring"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/XeroAPI/xoauth/pkg/oidc"
+	"github.com/zalando/go-keyring"
 )
 
 const KeyRingService = "com.xero.xoauth"
 const ConfigDirPath = ".xoauth"
 const ConfigFileName = "xoauth.json"
 
-
 type OidcClient struct {
-	Authority string
-	Alias string
-	GrantType string
-	ClientId string
+	Authority    string
+	Alias        string
+	GrantType    string
+	ClientId     string
 	ClientSecret string
-	CreatedDate time.Time
-	Scopes []string
+	CreatedDate  time.Time
+	Scopes       []string
 }
 
 func EnsureDbExists() error {
@@ -51,7 +51,6 @@ func EnsureDbExists() error {
 	return nil
 }
 
-
 func fileExists(filename string) bool {
 	info, err := os.Stat(filename)
 	if os.IsNotExist(err) {
@@ -59,7 +58,6 @@ func fileExists(filename string) bool {
 	}
 	return !info.IsDir()
 }
-
 
 func ensurePathExists(directory string) error {
 	if _, err := os.Stat(directory); os.IsNotExist(err) {
@@ -72,7 +70,6 @@ func ensurePathExists(directory string) error {
 	return nil
 }
 
-
 func getDbFile() string {
 	home, err := os.UserHomeDir()
 
@@ -84,7 +81,6 @@ func getDbFile() string {
 
 	return path
 }
-
 
 func GetClients() (map[string]OidcClient, error) {
 	var clients = make(map[string]OidcClient)
@@ -131,13 +127,11 @@ func GetClientWithSecret(allClients map[string]OidcClient, name string) (OidcCli
 	return client, nil
 }
 
-
 func GetClientWithoutSecret(allClients map[string]OidcClient, name string) (OidcClient, error) {
 	var client OidcClient
 	client = allClients[name]
 	return client, nil
 }
-
 
 func ClientExists(name string) (bool, error) {
 	clients, readErr := GetClients()
@@ -153,7 +147,6 @@ func ClientExists(name string) (bool, error) {
 	return false, nil
 }
 
-
 func writeClients(clients map[string]OidcClient) error {
 	fileName := getDbFile()
 	directory := filepath.Dir(fileName)
@@ -168,7 +161,6 @@ func writeClients(clients map[string]OidcClient) error {
 	err := ioutil.WriteFile(fileName, jsonData, 0644)
 	return err
 }
-
 
 func SaveClientMetadata(client OidcClient) (bool, error) {
 	clients, readErr := GetClients()
@@ -204,8 +196,6 @@ func DeleteClientSecret(clientName string) (bool, error) {
 	return true, nil
 }
 
-
-
 func SaveClientWithSecret(client OidcClient, secret string) (bool, error) {
 	_, clientErr := SaveClientMetadata(client)
 
@@ -224,7 +214,6 @@ func SaveClientWithSecret(client OidcClient, secret string) (bool, error) {
 
 	return true, nil
 }
-
 
 func DeleteClient(clientName string) (bool, error) {
 	clients, clientsErr := GetClients()
@@ -248,7 +237,7 @@ func DeleteClient(clientName string) (bool, error) {
 	if tokenErr != nil {
 		log.Printf("No tokens to delete for %s", clientName)
 	}
-	
+
 	delete(clients, clientName)
 
 	err := writeClients(clients)
@@ -259,7 +248,6 @@ func DeleteClient(clientName string) (bool, error) {
 
 	return true, nil
 }
-
 
 func SaveTokens(clientName string, tokenData string) (bool, error) {
 	var keyName = fmt.Sprintf("%s:token_set", clientName)

@@ -2,10 +2,10 @@ package config
 
 import (
 	"errors"
-	"github.com/spf13/cobra"
 	"log"
-	"github.com/xero-github/xoauth/pkg/db"
 
+	"github.com/XeroAPI/xoauth/pkg/db"
+	"github.com/spf13/cobra"
 )
 
 func ValidateSecretCmdArgs(cmd *cobra.Command, args []string) error {
@@ -19,7 +19,6 @@ func ValidateSecretCmdArgs(cmd *cobra.Command, args []string) error {
 
 	return nil
 }
-
 
 func UpdateSecret(clientName string, clientSecret string) {
 	allClients, clientsErr := db.GetClients()
