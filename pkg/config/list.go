@@ -2,11 +2,12 @@ package config
 
 import (
 	"fmt"
-	"github.com/gookit/color"
 	"log"
 	"os"
 	"strings"
-	"github.com/xero-github/xoauth/pkg/db"
+
+	"github.com/XeroAPI/xoauth/pkg/db"
+	"github.com/gookit/color"
 )
 
 func MaskString(input string) string {
@@ -14,7 +15,6 @@ func MaskString(input string) string {
 	maskedString := strings.Repeat("•", strLength)
 	return maskedString
 }
-
 
 func ListAll(showSecrets bool) {
 	allClients, err := db.GetClients()
@@ -47,4 +47,3 @@ func ListAll(showSecrets bool) {
 		)
 	}
 }
-

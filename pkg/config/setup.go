@@ -3,16 +3,17 @@ package config
 import (
 	"errors"
 	"fmt"
-	"github.com/AlecAivazis/survey/v2"
-	"github.com/gookit/color"
-	"github.com/spf13/cobra"
-	"github.com/xero-github/xoauth/pkg/db"
-	"github.com/xero-github/xoauth/pkg/oidc"
 	"log"
 	"net/url"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/AlecAivazis/survey/v2"
+	"github.com/XeroAPI/xoauth/pkg/db"
+	"github.com/XeroAPI/xoauth/pkg/oidc"
+	"github.com/gookit/color"
+	"github.com/spf13/cobra"
 )
 
 func validateClientId(input interface{}) error {
@@ -24,7 +25,6 @@ func validateClientId(input interface{}) error {
 
 	return nil
 }
-
 
 func validateAuthority(val interface{}) error {
 	urlObj, err := url.Parse(val.(string))
@@ -50,7 +50,6 @@ func ValidateName(val interface{}) error {
 	return nil
 }
 
-
 func ValidateClientNameCmdArgs(cmd *cobra.Command, args []string) error {
 	if len(args) < 1 {
 		return nil
@@ -65,7 +64,6 @@ func ValidateClientNameCmdArgs(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-
 func Contains(arr []string, needle string) bool {
 	for _, value := range arr {
 		if value == needle {
@@ -74,7 +72,6 @@ func Contains(arr []string, needle string) bool {
 	}
 	return false
 }
-
 
 func InteractiveSetup(clientName string, defaultPort int) {
 	var aliasResult = clientName
@@ -122,7 +119,7 @@ func InteractiveSetup(clientName string, defaultPort int) {
 
 	var authorityResult string
 	authority := &survey.Input{
-		Message:    "What's the Authority?",
+		Message: "What's the Authority?",
 		Default: "https://identity.xero.com",
 	}
 
@@ -135,7 +132,7 @@ func InteractiveSetup(clientName string, defaultPort int) {
 
 	var clientIdResult string
 	clientId := &survey.Input{
-		Message:    "What's your client_id?",
+		Message: "What's your client_id?",
 	}
 
 	clientIdErr := survey.AskOne(clientId, &clientIdResult, survey.WithValidator(validateClientId))
@@ -168,7 +165,7 @@ func InteractiveSetup(clientName string, defaultPort int) {
 	var clientSecretErr error
 
 	clientSecret := &survey.Password{
-		Message:    clientSecretLabel,
+		Message: clientSecretLabel,
 	}
 
 	if grantTypeResult == oidc.PKCE {
@@ -208,7 +205,7 @@ func InteractiveSetup(clientName string, defaultPort int) {
 
 		var scopesResult string
 		scopes := &survey.Input{
-			Message:  fmt.Sprintf("Add scope (`%s` when done)", scopeQuit),
+			Message: fmt.Sprintf("Add scope (`%s` when done)", scopeQuit),
 		}
 
 		scopesErr := survey.AskOne(scopes, &scopesResult, survey.WithValidator(survey.Required))
@@ -224,7 +221,7 @@ func InteractiveSetup(clientName string, defaultPort int) {
 		}
 
 		if scopesResult != scopeQuit {
-			if Contains(scopeCollection,  scopesResult) {
+			if Contains(scopeCollection, scopesResult) {
 				log.Printf("Already added %q\n", scopesResult)
 			} else {
 				scopeCollection = append(scopeCollection, scopesResult)
@@ -264,6 +261,6 @@ func InteractiveSetup(clientName string, defaultPort int) {
 			color.Yellow.Sprintf("👉 Make sure you've added"),
 			color.White.Sprintf(fmt.Sprintf("http://localhost:%d/callback", defaultPort)),
 			color.Yellow.Sprintf("as a redirect_uri in your identity provider's portal"),
-			)
+		)
 	}
 }

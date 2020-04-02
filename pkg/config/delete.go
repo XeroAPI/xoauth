@@ -1,9 +1,10 @@
 package config
 
 import (
-	"github.com/AlecAivazis/survey/v2"
-	"github.com/xero-github/xoauth/pkg/db"
 	"log"
+
+	"github.com/AlecAivazis/survey/v2"
+	"github.com/XeroAPI/xoauth/pkg/db"
 )
 
 func ConfirmDelete(connection string) {

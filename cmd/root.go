@@ -2,13 +2,14 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
-	"github.com/xero-github/xoauth/pkg/config"
-	"github.com/xero-github/xoauth/pkg/connect"
-	"github.com/xero-github/xoauth/pkg/tokens"
 	"log"
 	"os"
 	"strconv"
+
+	"github.com/XeroAPI/xoauth/pkg/config"
+	"github.com/XeroAPI/xoauth/pkg/connect"
+	"github.com/XeroAPI/xoauth/pkg/tokens"
+	"github.com/spf13/cobra"
 )
 
 var rootCmd = &cobra.Command{
@@ -27,7 +28,6 @@ A tool to help you work with OpenId Connect APIs.`,
 	},
 }
 
-
 func getEnv(key, fallback string) string {
 	value, exists := os.LookupEnv(key)
 	if !exists {
@@ -35,7 +35,6 @@ func getEnv(key, fallback string) string {
 	}
 	return value
 }
-
 
 func init() {
 	var fallbackPort = 8080
@@ -46,10 +45,10 @@ func init() {
 	}
 
 	var ShowSecrets bool
-	var listCmd = &cobra.Command {
-		Use: "list",
+	var listCmd = &cobra.Command{
+		Use:   "list",
 		Short: "List all the OpenId Connect connections you've set up",
-		Args:  func(cmd *cobra.Command, args []string) error {
+		Args: func(cmd *cobra.Command, args []string) error {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
@@ -83,7 +82,7 @@ func init() {
 	}
 
 	connectCmd.PersistentFlags().BoolVarP(&DryRun, "dry-run", "d", false, "Output the authorisation request URL instead of perforiming the request")
-	connectCmd.PersistentFlags().IntVarP(&Port, "port", "p", defaultPort, "Localhost port",)
+	connectCmd.PersistentFlags().IntVarP(&Port, "port", "p", defaultPort, "Localhost port")
 
 	var deleteCmd = &cobra.Command{
 		Use:   "delete [connection]",
@@ -148,7 +147,7 @@ func init() {
 	var EnvFlag bool
 	var ForceRefresh bool
 	var tokenCmd = &cobra.Command{
-		Use: "token [clientName]",
+		Use:   "token [clientName]",
 		Short: "Get the last saved set of tokens out of the keychain",
 		Run: func(cmd *cobra.Command, args []string) {
 			if len(args) == 1 {
@@ -166,19 +165,18 @@ func init() {
 		},
 	}
 
-	tokenCmd.PersistentFlags().BoolVarP(&EnvFlag, "env", "e", false,"Export tokens to environment",)
-	tokenCmd.PersistentFlags().BoolVarP(&ForceRefresh, "refresh", "r", false,"Force a token refresh",)
+	tokenCmd.PersistentFlags().BoolVarP(&EnvFlag, "env", "e", false, "Export tokens to environment")
+	tokenCmd.PersistentFlags().BoolVarP(&ForceRefresh, "refresh", "r", false, "Force a token refresh")
 
-
-	var DoctorPort int;
+	var DoctorPort int
 	var doctorCmd = &cobra.Command{
-		Use: "doctor",
+		Use:   "doctor",
 		Short: "Checks that xoauth is configured properly",
-		Run: func(cmd *cobra.Command, args[]string) {
+		Run: func(cmd *cobra.Command, args []string) {
 			config.Doctor(DoctorPort)
 		},
 	}
-	doctorCmd.PersistentFlags().IntVarP(&DoctorPort, "port", "p", defaultPort, "Localhost port",)
+	doctorCmd.PersistentFlags().IntVarP(&DoctorPort, "port", "p", defaultPort, "Localhost port")
 
 	setupCmd.AddCommand(addScopeCmd)
 	setupCmd.AddCommand(removeScopeCmd)

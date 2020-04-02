@@ -3,14 +3,14 @@ package clientCredsFlow
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/gookit/color"
-	"github.com/xero-github/xoauth/pkg/db"
-	"github.com/xero-github/xoauth/pkg/oidc"
 	"log"
 	"os"
 	"strings"
-)
 
+	"github.com/XeroAPI/xoauth/pkg/db"
+	"github.com/XeroAPI/xoauth/pkg/oidc"
+	"github.com/gookit/color"
+)
 
 func Request(wellKnownConfig oidc.WellKnownConfiguration, client db.OidcClient, dryRun bool) {
 	var scopes = strings.Join(client.Scopes, " ")
@@ -51,5 +51,3 @@ func Request(wellKnownConfig oidc.WellKnownConfiguration, client db.OidcClient, 
 		log.Fatalln(finalWriteErr)
 	}
 }
-
-
