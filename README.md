@@ -188,7 +188,7 @@ xoauth token xero --refresh
 
 ```shell script
 # for instance
-eval(xoauth token xero --env)
+eval "$(xoauth token xero --env)"
 echo $XERO_ACCESS_TOKEN
 ```
 
