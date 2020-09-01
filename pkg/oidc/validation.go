@@ -59,8 +59,6 @@ func ValidateToken(tokenString string, configuration WellKnownConfiguration, cli
 		return nil, errors.New("expecting JWT header to have string kid")
 	}
 
-	log.Println(tokenString)
-
 	token, tokenErr := jwt.Parse(tokenString, getKeyValidatorFunc(keys), jwt.WithLeeway(clockToleranceSeconds), jwt.WithoutAudienceValidation(), jwt.WithIssuer(configuration.Issuer))
 
 	if tokenErr != nil {
