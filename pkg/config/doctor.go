@@ -27,7 +27,7 @@ func portFree(portNumber int) error {
 	return nil
 }
 
-func Doctor(port int) {
+func Doctor(database *db.CredentialStore, port int) {
 	// Check that we have a crypto implementation for generating random state
 	prngErr := oidc.AssertAvailablePRNG()
 
@@ -36,7 +36,7 @@ func Doctor(port int) {
 	}
 
 	// Check we can access ~/.xoauth
-	dbErr := db.EnsureDbExists()
+	dbErr := database.EnsureDbExists()
 
 	if dbErr != nil {
 		log.Fatalf("db error: %v", dbErr)

@@ -8,8 +8,8 @@ import (
 	"github.com/gookit/color"
 )
 
-func ChooseClient() (string, error) {
-	allClients, err := db.GetClients()
+func ChooseClient(database *db.CredentialStore) (string, error) {
+	allClients, err := database.GetClients()
 
 	if err != nil {
 		panic(err)

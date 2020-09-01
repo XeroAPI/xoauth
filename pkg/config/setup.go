@@ -73,7 +73,7 @@ func Contains(arr []string, needle string) bool {
 	return false
 }
 
-func InteractiveSetup(clientName string, defaultPort int) {
+func InteractiveSetup(database *db.CredentialStore, clientName string, defaultPort int) {
 	var aliasResult = clientName
 
 	if aliasResult == "" {
@@ -91,7 +91,7 @@ func InteractiveSetup(clientName string, defaultPort int) {
 		}
 	}
 
-	exists, existsErr := db.ClientExists(aliasResult)
+	exists, existsErr := database.ClientExists(aliasResult)
 
 	if existsErr != nil {
 		log.Fatal(existsErr)
@@ -235,7 +235,7 @@ func InteractiveSetup(clientName string, defaultPort int) {
 
 	var saveErr error
 
-	_, saveErr = db.SaveClientWithSecret(client, clientSecretResult)
+	_, saveErr = database.SaveClientWithSecret(client, clientSecretResult)
 
 	if saveErr != nil {
 		log.Fatalf("error creating client: %v\n", saveErr)

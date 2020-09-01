@@ -20,20 +20,20 @@ func ValidateSecretCmdArgs(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func UpdateSecret(clientName string, clientSecret string) {
-	allClients, clientsErr := db.GetClients()
+func UpdateSecret(database *db.CredentialStore, clientName string, clientSecret string) {
+	allClients, clientsErr := database.GetClients()
 
 	if clientsErr != nil {
 		log.Fatal(clientsErr)
 	}
 
-	client, clientErr := db.GetClientWithoutSecret(allClients, clientName)
+	client, clientErr := database.GetClientWithoutSecret(allClients, clientName)
 
 	if clientErr != nil {
 		log.Fatal(clientErr)
 	}
 
-	_, secretErr := db.SetClientSecret(client.Alias, clientSecret)
+	_, secretErr := database.SetClientSecret(client.Alias, clientSecret)
 
 	if secretErr != nil {
 		log.Fatal(secretErr)

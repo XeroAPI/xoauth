@@ -7,7 +7,7 @@ import (
 	"github.com/XeroAPI/xoauth/pkg/db"
 )
 
-func ConfirmDelete(connection string) {
+func ConfirmDelete(database *db.CredentialStore, connection string) {
 	confirm := false
 	prompt := &survey.Confirm{
 		Message: "Are you sure you want to delete this connection?",
@@ -24,7 +24,7 @@ func ConfirmDelete(connection string) {
 		log.Printf("Exiting without deleting")
 	}
 
-	_, err := db.DeleteClient(connection)
+	_, err := database.DeleteClient(connection)
 
 	if err != nil {
 		panic(err)

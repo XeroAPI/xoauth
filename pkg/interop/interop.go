@@ -2,15 +2,14 @@ package interop
 
 import (
 	"os/exec"
-	"runtime"
 	"strings"
 )
 
-func OpenBrowser(url string) error {
+func OpenBrowser(operatingSystem string, url string) error {
 	var cmd string
 	var args []string
 
-	switch runtime.GOOS {
+	switch operatingSystem {
 	case "windows":
 		cmd = "cmd"
 		args = []string{"/c", "start"}

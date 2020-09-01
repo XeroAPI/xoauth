@@ -9,14 +9,14 @@ import (
 	"github.com/XeroAPI/xoauth/pkg/oidc"
 )
 
-func Authorise(name string, dryRun bool, localHostPort int) {
-	allClients, dbErr := db.GetClients()
+func Authorise(database *db.CredentialStore, name string, operatingSystem string, dryRun bool, localHostPort int) {
+	allClients, dbErr := database.GetClients()
 
 	if dbErr != nil {
 		log.Fatalln(dbErr)
 	}
 
-	var clientExists, existsErr = db.ClientExists(name)
+	var clientExists, existsErr = database.ClientExists(name)
 
 	if existsErr != nil {
 		log.Fatalln(existsErr)
@@ -26,7 +26,7 @@ func Authorise(name string, dryRun bool, localHostPort int) {
 		log.Fatalf("The client %q doesn't exist. Create it using `xoauth setup`.", name)
 	}
 
-	var client, clientErr = db.GetClientWithSecret(allClients, name)
+	var client, clientErr = database.GetClientWithSecret(allClients, name)
 
 	if clientErr != nil {
 		panic(clientErr)
@@ -40,11 +40,14 @@ func Authorise(name string, dryRun bool, localHostPort int) {
 
 	switch grantType := client.GrantType; grantType {
 	case oidc.PKCE:
-		authCodeFlow.RequestWithProofOfKeyExchange(wellKnownConfig, client, dryRun, localHostPort)
+		interactor := authCodeFlow.NewCodeFlowInteractor(wellKnownConfig, database, operatingSystem)
+		interactor.RequestWithProofOfKeyExchange(client, dryRun, localHostPort)
 	case oidc.AuthorisationCode:
-		authCodeFlow.Request(wellKnownConfig, client, dryRun, localHostPort)
+		interactor := authCodeFlow.NewCodeFlowInteractor(wellKnownConfig, database, operatingSystem)
+		interactor.Request(client, dryRun, localHostPort)
 	case oidc.ClientCredentials:
-		clientCredsFlow.Request(wellKnownConfig, client, dryRun)
+		interactor := clientCredsFlow.NewClientCredsFlow(wellKnownConfig, database, operatingSystem)
+		interactor.Request(client, dryRun)
 	default:
 		log.Fatal("Unsupported grant type")
 	}

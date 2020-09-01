@@ -12,35 +12,23 @@ import (
 	"github.com/XeroAPI/xoauth/pkg/oidc"
 )
 
-func ShowTokens(clientName string, exportToEnv bool, forceRefresh bool) {
-	exists, existsErr := db.ClientExists(clientName)
+func ShowTokens(database *db.CredentialStore, clientName string, exportToEnv bool, forceRefresh bool) {
+	exists, existsErr := database.ClientExists(clientName)
 
 	if existsErr != nil || !exists {
 		log.Fatalln("Client doesn't exist")
 	}
 
-	tokenString, tokenErr := db.GetTokens(clientName)
+	tokenSet, tokenErr := database.GetTokens(clientName)
 
 	if tokenErr != nil {
 		log.Fatalln(tokenErr)
 	}
 
-	if tokenString == "" {
-		log.Fatalln("token set is not valid JSON.")
-	}
-
-	var tokenSet oidc.TokenResultSet
-
-	tokenParseErr := json.Unmarshal([]byte(tokenString), &tokenSet)
-
-	if tokenParseErr != nil {
-		log.Fatalln(tokenParseErr)
-	}
-
 	if tokenSet.ExpiresAt <= time.Now().Unix() || forceRefresh {
 		var err error
 
-		tokenSet, err = Refresh(clientName, tokenSet)
+		tokenSet, err = Refresh(database, clientName, tokenSet)
 
 		if err != nil {
 			log.Fatalln(err)
@@ -86,13 +74,13 @@ func PrintJson(tokenSet oidc.TokenResultSet) {
 	log.Printf("%s", tokenSerialised)
 }
 
-func Refresh(clientName string, tokenSet oidc.TokenResultSet) (oidc.TokenResultSet, error) {
-	allClients, allClientsErr := db.GetClients()
+func Refresh(database *db.CredentialStore, clientName string, tokenSet oidc.TokenResultSet) (oidc.TokenResultSet, error) {
+	allClients, allClientsErr := database.GetClients()
 	if allClientsErr != nil {
 		log.Fatalln(allClientsErr)
 	}
 
-	clientConfig, err := db.GetClientWithSecret(allClients, clientName)
+	clientConfig, err := database.GetClientWithSecret(allClients, clientName)
 
 	if err != nil {
 		return tokenSet, err
@@ -117,17 +105,32 @@ func Refresh(clientName string, tokenSet oidc.TokenResultSet) (oidc.TokenResultS
 	tokenSet.ExpiresIn = refreshResult.ExpiresIn
 	tokenSet.ExpiresAt = oidc.AbsoluteExpiry(time.Now(), refreshResult.ExpiresIn)
 
-	var serialised, marshalErr = json.MarshalIndent(tokenSet, "", " ")
-
-	if marshalErr != nil {
-		return tokenSet, marshalErr
-	}
-
-	_, saveErr := db.SaveTokens(clientName, string(serialised))
+	_, saveErr := database.SaveTokens(clientName, oidc.TokenResultSet{
+		RefreshToken: refreshResult.RefreshToken,
+		AccessToken:  refreshResult.AccessToken,
+		ExpiresAt:    tokenSet.ExpiresAt,
+	})
 
 	if saveErr != nil {
 		return tokenSet, saveErr
 	}
 
 	return tokenSet, nil
+}
+
+func CleanTokens(database *db.CredentialStore, clientName string) error {
+	exists, existsErr := database.ClientExists(clientName)
+
+	if existsErr != nil || !exists {
+		log.Fatalln("Client doesn't exist")
+	}
+
+	err := database.DeleteTokens(clientName)
+
+	if err != nil {
+		log.Println(err)
+		log.Fatalln("Error deleting tokens")
+	}
+
+	return nil
 }

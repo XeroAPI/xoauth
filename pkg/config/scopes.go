@@ -19,14 +19,14 @@ func ValidateScopeCmdArgs(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func AddScope(clientName string, scopeNames ...string) {
-	allClients, clientsErr := db.GetClients()
+func AddScope(database *db.CredentialStore, clientName string, scopeNames ...string) {
+	allClients, clientsErr := database.GetClients()
 
 	if clientsErr != nil {
 		log.Fatal(clientsErr)
 	}
 
-	client, clientErr := db.GetClientWithoutSecret(allClients, clientName)
+	client, clientErr := database.GetClientWithoutSecret(allClients, clientName)
 
 	if clientErr != nil {
 		log.Fatal(clientErr)
@@ -40,7 +40,7 @@ func AddScope(clientName string, scopeNames ...string) {
 		client.Scopes = append(client.Scopes, scope)
 	}
 
-	_, saveErr := db.SaveClientMetadata(client)
+	_, saveErr := database.SaveClientMetadata(client)
 
 	if saveErr != nil {
 		log.Fatal(saveErr)
@@ -49,14 +49,14 @@ func AddScope(clientName string, scopeNames ...string) {
 	log.Printf("Scopes are: \n • %s", strings.Join(client.Scopes, "\n • "))
 }
 
-func RemoveScope(clientName string, scopeNames ...string) {
-	allClients, clientsErr := db.GetClients()
+func RemoveScope(database *db.CredentialStore, clientName string, scopeNames ...string) {
+	allClients, clientsErr := database.GetClients()
 
 	if clientsErr != nil {
 		log.Fatal(clientsErr)
 	}
 
-	client, clientErr := db.GetClientWithoutSecret(allClients, clientName)
+	client, clientErr := database.GetClientWithoutSecret(allClients, clientName)
 
 	if clientErr != nil {
 		log.Fatal(clientErr)
@@ -74,7 +74,7 @@ func RemoveScope(clientName string, scopeNames ...string) {
 
 	client.Scopes = newScopes
 
-	_, saveErr := db.SaveClientMetadata(client)
+	_, saveErr := database.SaveClientMetadata(client)
 
 	if saveErr != nil {
 		log.Fatal(saveErr)

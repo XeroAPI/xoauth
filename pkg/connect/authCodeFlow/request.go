@@ -12,7 +12,35 @@ import (
 	"github.com/gookit/color"
 )
 
-func request(wellKnownConfig oidc.WellKnownConfiguration, client db.OidcClient, codeVerifier string, codeChallenge string, dryRun bool, localHostPort int) {
+type CodeFlowInteractor struct {
+	wellKnownConfig oidc.WellKnownConfiguration
+	database        *db.CredentialStore
+	operatingSystem string
+}
+
+func NewCodeFlowInteractor(wellKnownConfig oidc.WellKnownConfiguration, database *db.CredentialStore, operatingSystem string) CodeFlowInteractor {
+	return CodeFlowInteractor{
+		wellKnownConfig: wellKnownConfig,
+		database:        database,
+		operatingSystem: operatingSystem,
+	}
+}
+
+func (interactor *CodeFlowInteractor) Request(client db.OidcClient, dryRun bool, localHostPort int) {
+	interactor.initRequest(client, "", "", dryRun, localHostPort)
+}
+
+func (interactor *CodeFlowInteractor) RequestWithProofOfKeyExchange(client db.OidcClient, dryRun bool, localHostPort int) {
+	var verifierSet, verifierErr = oidc.GenerateCodeVerifier()
+
+	if verifierErr != nil {
+		log.Fatalln(verifierErr)
+	}
+
+	interactor.initRequest(client, verifierSet.CodeVerifier, verifierSet.CodeChallenge, dryRun, localHostPort)
+}
+
+func (interactor *CodeFlowInteractor) initRequest(client db.OidcClient, codeVerifier string, codeChallenge string, dryRun bool, localHostPort int) {
 	redirectUri := fmt.Sprintf("http://localhost:%d/callback", localHostPort)
 	state, stateErr := oidc.GenerateRandomStringURLSafe(24)
 
@@ -21,7 +49,7 @@ func request(wellKnownConfig oidc.WellKnownConfiguration, client db.OidcClient, 
 	}
 
 	authorisationUrl := oidc.BuildCodeAuthorisationRequest(
-		wellKnownConfig,
+		interactor.wellKnownConfig,
 		client.ClientId,
 		redirectUri,
 		client.Scopes,
@@ -44,12 +72,11 @@ func request(wellKnownConfig oidc.WellKnownConfiguration, client db.OidcClient, 
 
 	// Open a web server to receive the redirect
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		handleOidcCallback(w, r,
+		interactor.handleOidcCallback(w, r,
 			client.Alias,
 			client.ClientId,
 			client.ClientSecret,
 			redirectUri,
-			wellKnownConfig,
 			state,
 			codeVerifier,
 			cancel,
@@ -58,7 +85,7 @@ func request(wellKnownConfig oidc.WellKnownConfiguration, client db.OidcClient, 
 
 	log.Printf("%s", color.FgYellow.Sprintf("Opening browser window"))
 
-	openErr := interop.OpenBrowser(authorisationUrl)
+	openErr := interop.OpenBrowser(interactor.operatingSystem, authorisationUrl)
 
 	if openErr != nil {
 		log.Fatalf("failed to open browser window %v", openErr)
@@ -75,22 +102,10 @@ func request(wellKnownConfig oidc.WellKnownConfiguration, client db.OidcClient, 
 		// Shutdown the server when the context is canceled
 		err := s.Shutdown(ctx)
 
-		if err != nil {
+		if err != nil && err != context.Canceled {
 			log.Fatalln(err)
+		} else {
+			log.Println("")
 		}
 	}
-}
-
-func Request(wellKnownConfig oidc.WellKnownConfiguration, client db.OidcClient, dryRun bool, localHostPort int) {
-	request(wellKnownConfig, client, "", "", dryRun, localHostPort)
-}
-
-func RequestWithProofOfKeyExchange(wellKnownConfig oidc.WellKnownConfiguration, client db.OidcClient, dryRun bool, localHostPort int) {
-	var verifierSet, verifierErr = oidc.GenerateCodeVerifier()
-
-	if verifierErr != nil {
-		log.Fatalln(verifierErr)
-	}
-
-	request(wellKnownConfig, client, verifierSet.CodeVerifier, verifierSet.CodeChallenge, dryRun, localHostPort)
 }

@@ -13,19 +13,19 @@ import (
 )
 
 type TokenResultSet struct {
-	AccessToken string `json:"access_token"`
+	AccessToken   string `json:"access_token"`
 	IdentityToken string `json:"id_token"`
-	RefreshToken string `json:"refresh_token"`
-	TokenType string `json:"token_type"`
-	ExpiresIn int `json:"expires_in"`
-	ExpiresAt int64 `json:"expires_at"`
+	RefreshToken  string `json:"refresh_token"`
+	TokenType     string `json:"token_type"`
+	ExpiresIn     int    `json:"expires_in"`
+	ExpiresAt     int64  `json:"expires_at"`
 }
 
 type AccessTokenResultSet struct {
 	AccessToken string `json:"access_token"`
-	TokenType string `json:"token_type"`
-	ExpiresIn int `json:"expires_in"`
-	ExpiresAt int64 `json:"expires_at"`
+	TokenType   string `json:"token_type"`
+	ExpiresIn   int    `json:"expires_in"`
+	ExpiresAt   int64  `json:"expires_at"`
 }
 
 func BuildCodeAuthorisationRequest(configuration WellKnownConfiguration, clientId string, redirectUri string, scopes []string, state string, codeChallenge string) string {
@@ -56,10 +56,9 @@ func BuildCodeAuthorisationRequest(configuration WellKnownConfiguration, clientI
 }
 
 type AuthorisationResponse struct {
-	Code string
+	Code  string
 	State string
 }
-
 
 func ValidateAuthorisationResponse(url *url.URL, state string) (AuthorisationResponse, error) {
 	var response AuthorisationResponse
@@ -75,14 +74,13 @@ func ValidateAuthorisationResponse(url *url.URL, state string) (AuthorisationRes
 		return response, errors.New(`oidc Error: no code in OIDC response`)
 	}
 
-	response = AuthorisationResponse {
-		Code: code,
+	response = AuthorisationResponse{
+		Code:  code,
 		State: state,
 	}
 
 	return response, nil
 }
-
 
 func FormPost(tokenEndpoint string, clientId string, clientSecret string, formData url.Values, result interface{}) error {
 
@@ -113,9 +111,9 @@ func FormPost(tokenEndpoint string, clientId string, clientSecret string, formDa
 
 	if response.StatusCode != 200 {
 		var errorResult interface{}
-		todoErr := decoder.Decode(&errorResult)
+		endpointErr := decoder.Decode(&errorResult)
 
-		if todoErr != nil {
+		if endpointErr != nil {
 			return fmt.Errorf("received error from code endpoint, but unable to deserialise error message. statusCode: %d", response.StatusCode)
 		}
 
@@ -139,15 +137,14 @@ func FormPost(tokenEndpoint string, clientId string, clientSecret string, formDa
 	return nil
 }
 
-
 func ExchangeCodeForToken(tokenEndpoint string, code string, clientId string, clientSecret string, codeVerifier string, redirectUri string) (TokenResultSet, error) {
 	var result TokenResultSet
 
 	log.Printf("Exchanging code at token endpoint: %s\n", tokenEndpoint)
 
 	formData := url.Values{
-		"code": {code},
-		"grant_type": {"authorization_code"},
+		"code":         {code},
+		"grant_type":   {"authorization_code"},
 		"redirect_uri": {redirectUri},
 	}
 
@@ -171,7 +168,6 @@ func ExchangeCodeForToken(tokenEndpoint string, code string, clientId string, cl
 	return result, nil
 }
 
-
 func RequestWithClientCredentials(tokenEndpoint string, clientId string, clientSecret string, scope string) (AccessTokenResultSet, error) {
 	var result AccessTokenResultSet
 
@@ -179,7 +175,7 @@ func RequestWithClientCredentials(tokenEndpoint string, clientId string, clientS
 
 	formData := url.Values{
 		"grant_type": {"client_credentials"},
-		"scope": {scope},
+		"scope":      {scope},
 	}
 
 	var postError = FormPost(tokenEndpoint, clientId, clientSecret, formData, &result)
@@ -192,7 +188,6 @@ func RequestWithClientCredentials(tokenEndpoint string, clientId string, clientS
 	return result, nil
 }
 
-
 func AbsoluteExpiry(now time.Time, expiresIn int) int64 {
 	// ExpiresIn returns expiry time in seconds
 	var future = now.Add(time.Second * time.Duration(expiresIn))
@@ -201,12 +196,10 @@ func AbsoluteExpiry(now time.Time, expiresIn int) int64 {
 	return future.Unix()
 }
 
-
 type CodeVerifier struct {
-	CodeVerifier string
+	CodeVerifier  string
 	CodeChallenge string
 }
-
 
 func GenerateCodeVerifier() (CodeVerifier, error) {
 	var result CodeVerifier

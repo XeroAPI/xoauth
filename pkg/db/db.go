@@ -4,17 +4,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
+	"github.com/XeroAPI/xoauth/pkg/keyring"
+	"github.com/XeroAPI/xoauth/pkg/oidc"
+
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
 	"time"
-
-	"github.com/XeroAPI/xoauth/pkg/oidc"
-	"github.com/zalando/go-keyring"
 )
 
-const KeyRingService = "com.xero.xoauth"
 const ConfigDirPath = ".xoauth"
 const ConfigFileName = "xoauth.json"
 
@@ -28,8 +28,18 @@ type OidcClient struct {
 	Scopes       []string
 }
 
-func EnsureDbExists() error {
-	fileName := getDbFile()
+type CredentialStore struct {
+	KeyRingService keyring.KeyRingService
+}
+
+func NewCredentialStore(ring *keyring.KeyRingService) *CredentialStore {
+	return &CredentialStore{
+		KeyRingService: *ring,
+	}
+}
+
+func (store *CredentialStore) EnsureDbExists() error {
+	fileName := store.getDbFile()
 	dir := filepath.Dir(fileName)
 
 	pathErr := ensurePathExists(dir)
@@ -41,7 +51,7 @@ func EnsureDbExists() error {
 	if !fileExists(fileName) {
 		var seedClients = map[string]OidcClient{}
 
-		err := writeClients(seedClients)
+		err := store.writeClients(seedClients)
 
 		if err != nil {
 			return err
@@ -70,7 +80,7 @@ func ensurePathExists(directory string) error {
 	return nil
 }
 
-func getDbFile() string {
+func (store *CredentialStore) getDbFile() string {
 	home, err := os.UserHomeDir()
 
 	if err != nil {
@@ -82,9 +92,9 @@ func getDbFile() string {
 	return path
 }
 
-func GetClients() (map[string]OidcClient, error) {
+func (store *CredentialStore) GetClients() (map[string]OidcClient, error) {
 	var clients = make(map[string]OidcClient)
-	var file = getDbFile()
+	var file = store.getDbFile()
 
 	if !fileExists(file) {
 		return clients, nil
@@ -105,21 +115,20 @@ func GetClients() (map[string]OidcClient, error) {
 	return clients, nil
 }
 
-func GetClientWithSecret(allClients map[string]OidcClient, name string) (OidcClient, error) {
+func (store *CredentialStore) GetClientWithSecret(allClients map[string]OidcClient, name string) (OidcClient, error) {
 	var client OidcClient
 
 	client = allClients[name]
 
-	secret, keyringErr := keyring.Get(KeyRingService, client.Alias)
+	if client.GrantType == oidc.PKCE {
+		client.ClientSecret = ""
+		return client, nil
+	}
+
+	secret, keyringErr := store.KeyRingService.Get(client.Alias)
 
 	if keyringErr != nil {
-		// There is no secret for PKCE
-		// Need to differentiate secret not found vs other keychain errors
-		if keyringErr.Error() == "secret not found in keyring" && client.GrantType == oidc.PKCE {
-
-		} else {
-			return client, keyringErr
-		}
+		return client, keyringErr
 	}
 
 	client.ClientSecret = secret
@@ -127,14 +136,14 @@ func GetClientWithSecret(allClients map[string]OidcClient, name string) (OidcCli
 	return client, nil
 }
 
-func GetClientWithoutSecret(allClients map[string]OidcClient, name string) (OidcClient, error) {
+func (store *CredentialStore) GetClientWithoutSecret(allClients map[string]OidcClient, name string) (OidcClient, error) {
 	var client OidcClient
 	client = allClients[name]
 	return client, nil
 }
 
-func ClientExists(name string) (bool, error) {
-	clients, readErr := GetClients()
+func (store *CredentialStore) ClientExists(name string) (bool, error) {
+	clients, readErr := store.GetClients()
 
 	if readErr != nil {
 		return false, readErr
@@ -147,8 +156,8 @@ func ClientExists(name string) (bool, error) {
 	return false, nil
 }
 
-func writeClients(clients map[string]OidcClient) error {
-	fileName := getDbFile()
+func (store *CredentialStore) writeClients(clients map[string]OidcClient) error {
+	fileName := store.getDbFile()
 	directory := filepath.Dir(fileName)
 
 	pathErr := ensurePathExists(directory)
@@ -162,8 +171,8 @@ func writeClients(clients map[string]OidcClient) error {
 	return err
 }
 
-func SaveClientMetadata(client OidcClient) (bool, error) {
-	clients, readErr := GetClients()
+func (store *CredentialStore) SaveClientMetadata(client OidcClient) (bool, error) {
+	clients, readErr := store.GetClients()
 
 	if readErr != nil {
 		return false, readErr
@@ -171,13 +180,13 @@ func SaveClientMetadata(client OidcClient) (bool, error) {
 
 	clients[client.Alias] = client
 
-	err := writeClients(clients)
+	err := store.writeClients(clients)
 
 	return true, err
 }
 
-func SetClientSecret(clientName string, secret string) (bool, error) {
-	keyringErr := keyring.Set(KeyRingService, clientName, secret)
+func (store *CredentialStore) SetClientSecret(clientName string, secret string) (bool, error) {
+	keyringErr := store.KeyRingService.Set(clientName, secret)
 
 	if keyringErr != nil {
 		return false, keyringErr
@@ -186,8 +195,8 @@ func SetClientSecret(clientName string, secret string) (bool, error) {
 	return true, nil
 }
 
-func DeleteClientSecret(clientName string) (bool, error) {
-	keyringErr := keyring.Delete(KeyRingService, clientName)
+func (store *CredentialStore) DeleteClientSecret(clientName string) (bool, error) {
+	keyringErr := store.KeyRingService.Delete(clientName)
 
 	if keyringErr != nil {
 		return false, keyringErr
@@ -196,27 +205,33 @@ func DeleteClientSecret(clientName string) (bool, error) {
 	return true, nil
 }
 
-func SaveClientWithSecret(client OidcClient, secret string) (bool, error) {
-	_, clientErr := SaveClientMetadata(client)
+func (store *CredentialStore) SaveClientWithSecret(client OidcClient, secret string) (bool, error) {
+	_, clientErr := store.SaveClientMetadata(client)
 
 	if clientErr != nil {
 		return false, clientErr
 	}
 
 	// PKCE clients don't have secrets, so skip this step if there's no secret.
-	if secret != "" {
-		_, secretErr := SetClientSecret(client.Alias, secret)
+	if client.GrantType == oidc.PKCE {
+		return true, nil
+	}
 
-		if secretErr != nil {
-			return false, secretErr
-		}
+	if secret == "" {
+		return false, fmt.Errorf("No secret provided")
+	}
+
+	_, secretErr := store.SetClientSecret(client.Alias, secret)
+
+	if secretErr != nil {
+		return false, secretErr
 	}
 
 	return true, nil
 }
 
-func DeleteClient(clientName string) (bool, error) {
-	clients, clientsErr := GetClients()
+func (store *CredentialStore) DeleteClient(clientName string) (bool, error) {
+	clients, clientsErr := store.GetClients()
 
 	if clientsErr != nil {
 		return false, clientsErr
@@ -226,13 +241,13 @@ func DeleteClient(clientName string) (bool, error) {
 		return false, errors.New("the client does not exist")
 	}
 
-	_, keyringErr := DeleteClientSecret(clientName)
+	_, keyringErr := store.DeleteClientSecret(clientName)
 
 	if keyringErr != nil {
 		return false, keyringErr
 	}
 
-	tokenErr := DeleteTokens(clientName)
+	tokenErr := store.DeleteTokens(clientName)
 
 	if tokenErr != nil {
 		log.Printf("No tokens to delete for %s", clientName)
@@ -240,7 +255,7 @@ func DeleteClient(clientName string) (bool, error) {
 
 	delete(clients, clientName)
 
-	err := writeClients(clients)
+	err := store.writeClients(clients)
 
 	if err != nil {
 		return false, err
@@ -249,9 +264,8 @@ func DeleteClient(clientName string) (bool, error) {
 	return true, nil
 }
 
-func SaveTokens(clientName string, tokenData string) (bool, error) {
-	var keyName = fmt.Sprintf("%s:token_set", clientName)
-	keyringErr := keyring.Set(KeyRingService, keyName, tokenData)
+func (store *CredentialStore) SaveTokens(clientName string, tokenSet oidc.TokenResultSet) (bool, error) {
+	keyringErr := store.KeyRingService.SetTokens(clientName, tokenSet)
 
 	if keyringErr != nil {
 		return false, keyringErr
@@ -260,22 +274,19 @@ func SaveTokens(clientName string, tokenData string) (bool, error) {
 	return true, nil
 }
 
-func GetTokens(clientName string) (string, error) {
-	var keyName = fmt.Sprintf("%s:token_set", clientName)
-
-	data, keyringErr := keyring.Get(KeyRingService, keyName)
+func (store *CredentialStore) GetTokens(clientName string) (oidc.TokenResultSet, error) {
+	var result oidc.TokenResultSet
+	result, keyringErr := store.KeyRingService.GetTokens(clientName)
 
 	if keyringErr != nil {
-		return "", keyringErr
+		return result, keyringErr
 	}
 
-	return data, nil
+	return result, nil
 }
 
-func DeleteTokens(clientName string) error {
-	var keyName = fmt.Sprintf("%s:token_set", clientName)
-
-	keyringErr := keyring.Delete(KeyRingService, keyName)
+func (store *CredentialStore) DeleteTokens(clientName string) error {
+	keyringErr := store.KeyRingService.DeleteTokens(clientName)
 
 	if keyringErr != nil {
 		return keyringErr

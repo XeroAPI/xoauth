@@ -3,15 +3,23 @@ package oidc
 import (
 	"errors"
 	"fmt"
-	"github.com/dgrijalva/jwt-go"
-	"github.com/lestrrat-go/jwx/jwk"
 	"log"
+	"time"
+
+	"github.com/dgrijalva/jwt-go/v4"
+	"github.com/lestrrat-go/jwx/jwk"
 )
 
-func lookUpKey(keyId string, keys *jwk.Set) (interface{}, error)  {
+func lookUpKey(keyId string, keys *jwk.Set) (interface{}, error) {
 
 	if key := keys.LookupKeyID(keyId); len(key) == 1 {
-		return key[0].Materialize()
+		var rawKey interface{}
+
+		if err := key[0].Raw(&rawKey); err != nil {
+			return rawKey, err
+		}
+
+		return rawKey, nil
 	}
 
 	return nil, errors.New(fmt.Sprintf("unable to find key with id %s", keyId))
@@ -41,14 +49,19 @@ func getKeyValidatorFunc(keys *jwk.Set) func(token *jwt.Token) (interface{}, err
 	}
 }
 
+func ValidateToken(tokenString string, configuration WellKnownConfiguration, clientId string) (interface{}, error) {
+	// Allow up to five minutes of clock skew
+	var clockToleranceSeconds = 300 * time.Second
 
-func ValidateToken(tokenString string, configuration WellKnownConfiguration) (interface{}, error) {
 	keys, jwksError := jwk.FetchHTTP(configuration.JwksUri)
 
 	if jwksError != nil {
 		return nil, errors.New("expecting JWT header to have string kid")
 	}
-	token, tokenErr := jwt.Parse(tokenString, getKeyValidatorFunc(keys))
+
+	log.Println(tokenString)
+
+	token, tokenErr := jwt.Parse(tokenString, getKeyValidatorFunc(keys), jwt.WithLeeway(clockToleranceSeconds), jwt.WithoutAudienceValidation(), jwt.WithIssuer(configuration.Issuer))
 
 	if tokenErr != nil {
 		return nil, tokenErr
@@ -66,4 +79,3 @@ func ValidateToken(tokenString string, configuration WellKnownConfiguration) (in
 
 	return claims, nil
 }
-

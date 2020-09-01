@@ -16,19 +16,19 @@ func MaskString(input string) string {
 	return maskedString
 }
 
-func ListAll(showSecrets bool) {
-	allClients, err := db.GetClients()
+func ListAll(database *db.CredentialStore, showSecrets bool) {
+	allClients, err := database.GetClients()
 
 	if err != nil {
-		panic(err)
+		log.Fatalln(err)
 	}
 
 	for _, value := range allClients {
-		// No client secret by default
+		// No client secrets in list view
 		clientSecret := MaskString("shhhhh! it's a secret!")
 
 		if showSecrets {
-			loadedClient, dbErr := db.GetClientWithSecret(allClients, value.Alias)
+			loadedClient, dbErr := database.GetClientWithSecret(allClients, value.Alias)
 
 			if dbErr != nil {
 				log.Fatalln(dbErr)
@@ -37,13 +37,46 @@ func ListAll(showSecrets bool) {
 			clientSecret = loadedClient.ClientSecret
 		}
 
-		fmt.Fprintf(os.Stderr, "%s: %s\nclient_id: %s\nclient_secret: %s\nauthority: %s\nscopes:\n  • %s\n\n",
-			color.White.Sprintf("name"),
-			color.Green.Sprintf(value.Alias),
-			color.Cyan.Sprintf(value.ClientId),
-			color.Cyan.Sprintf(clientSecret),
-			color.Yellow.Sprintf(value.Authority),
-			strings.Join(value.Scopes, "\n  • "),
-		)
+		print_info(value, clientSecret)
 	}
+}
+
+func print_info(value db.OidcClient, clientSecret string) {
+	fmt.Fprintf(os.Stderr, "%s: %s\nclient_id: %s\ngrant_type: %s\nclient_secret: %s\nauthority: %s\nscopes:\n  • %s\n\n",
+		color.White.Sprintf("name"),
+		color.Green.Sprintf(value.Alias),
+		color.Cyan.Sprintf(value.ClientId),
+		color.Cyan.Sprintf(value.GrantType),
+		color.Cyan.Sprintf(clientSecret),
+		color.Yellow.Sprintf(value.Authority),
+		strings.Join(value.Scopes, "\n  • "),
+	)
+}
+
+func Info(database *db.CredentialStore, name string, showSecrets bool) {
+	allClients, err := database.GetClients()
+
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	if value, ok := allClients[name]; ok {
+		clientSecret := MaskString("shhhhh! it's a secret!")
+
+		if showSecrets {
+			loadedClient, dbErr := database.GetClientWithSecret(allClients, value.Alias)
+
+			if dbErr != nil {
+				log.Fatalln(dbErr)
+			}
+
+			clientSecret = loadedClient.ClientSecret
+		}
+
+		print_info(value, clientSecret)
+		return
+	}
+
+	log.Fatalln(fmt.Sprintf("Couldn't find the client with the name \"%s\"", name))
+
 }

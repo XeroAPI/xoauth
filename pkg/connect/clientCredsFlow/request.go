@@ -12,10 +12,24 @@ import (
 	"github.com/gookit/color"
 )
 
-func Request(wellKnownConfig oidc.WellKnownConfiguration, client db.OidcClient, dryRun bool) {
+type ClientCredsFlowInteractor struct {
+	wellKnownConfig oidc.WellKnownConfiguration
+	database        *db.CredentialStore
+	operatingSystem string
+}
+
+func NewClientCredsFlow(wellKnownConfig oidc.WellKnownConfiguration, database *db.CredentialStore, operatingSystem string) ClientCredsFlowInteractor {
+	return ClientCredsFlowInteractor{
+		wellKnownConfig: wellKnownConfig,
+		database:        database,
+		operatingSystem: operatingSystem,
+	}
+}
+
+func (interactor *ClientCredsFlowInteractor) Request(client db.OidcClient, dryRun bool) {
 	var scopes = strings.Join(client.Scopes, " ")
 
-	var tokenResult, tokenErr = oidc.RequestWithClientCredentials(wellKnownConfig.TokenEndpoint, client.ClientId, client.ClientSecret, scopes)
+	var tokenResult, tokenErr = oidc.RequestWithClientCredentials(interactor.wellKnownConfig.TokenEndpoint, client.ClientId, client.ClientSecret, scopes)
 
 	if tokenErr != nil {
 		log.Fatalln(tokenErr)
@@ -23,7 +37,7 @@ func Request(wellKnownConfig oidc.WellKnownConfiguration, client db.OidcClient, 
 
 	log.Println("Validating access token")
 
-	var _, validateErr = oidc.ValidateToken(tokenResult.AccessToken, wellKnownConfig)
+	var _, validateErr = oidc.ValidateToken(tokenResult.AccessToken, interactor.wellKnownConfig, client.ClientId)
 
 	if validateErr != nil {
 		log.Fatalln(validateErr)
@@ -32,7 +46,10 @@ func Request(wellKnownConfig oidc.WellKnownConfiguration, client db.OidcClient, 
 	jsonData, jsonErr := json.MarshalIndent(tokenResult, "", "    ")
 
 	log.Print("Storing tokens in local keychain")
-	_, tokenSaveErr := db.SaveTokens(client.Alias, string(jsonData))
+	_, tokenSaveErr := interactor.database.SaveTokens(client.Alias, oidc.TokenResultSet{
+		AccessToken: tokenResult.AccessToken,
+		ExpiresAt:   tokenResult.ExpiresAt,
+	})
 
 	// Can fail with warning
 	if tokenSaveErr != nil {
@@ -45,7 +62,7 @@ func Request(wellKnownConfig oidc.WellKnownConfiguration, client db.OidcClient, 
 	if jsonErr != nil {
 		log.Fatalln(jsonErr)
 	}
-	_, finalWriteErr := fmt.Fprintf(os.Stdout, string(jsonData))
+	_, finalWriteErr := fmt.Fprintln(os.Stdout, string(jsonData))
 
 	if finalWriteErr != nil {
 		log.Fatalln(finalWriteErr)

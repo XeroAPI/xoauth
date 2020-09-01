@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/XeroAPI/xoauth/pkg/db"
 	"github.com/XeroAPI/xoauth/pkg/oidc"
 	"github.com/gookit/color"
 )
@@ -30,14 +29,13 @@ func renderAndLogError(w http.ResponseWriter, cancelFunc context.CancelFunc, err
 // handleOidcCallback waits for the OIDC server to redirect to our listening web server
 // It exchanges the `code` for a token set. If successful, the token set is logged to StdOut,
 // and the web server is shut down gracefully
-func handleOidcCallback(
+func (interactor *CodeFlowInteractor) handleOidcCallback(
 	w http.ResponseWriter,
 	r *http.Request,
 	clientName string,
 	clientId string,
 	clientSecret string,
 	redirectUri string,
-	wellKnownConfig oidc.WellKnownConfiguration,
 	state string,
 	codeVerifier string,
 	cancel context.CancelFunc,
@@ -51,7 +49,7 @@ func handleOidcCallback(
 
 	log.Println("Received OIDC response")
 
-	var result, codeExchangeErr = oidc.ExchangeCodeForToken(wellKnownConfig.TokenEndpoint, authorisationResponse.Code, clientId, clientSecret, codeVerifier, redirectUri)
+	var result, codeExchangeErr = oidc.ExchangeCodeForToken(interactor.wellKnownConfig.TokenEndpoint, authorisationResponse.Code, clientId, clientSecret, codeVerifier, redirectUri)
 
 	if codeExchangeErr != nil {
 		renderAndLogError(w, cancel, fmt.Sprintf("%v", codeExchangeErr))
@@ -60,7 +58,7 @@ func handleOidcCallback(
 
 	log.Println("Validating token")
 
-	var claims, validateErr = oidc.ValidateToken(result.IdentityToken, wellKnownConfig)
+	var claims, validateErr = oidc.ValidateToken(result.IdentityToken, interactor.wellKnownConfig, clientId)
 
 	if validateErr != nil {
 		renderAndLogError(w, cancel, fmt.Sprintf("%v", validateErr))
@@ -80,7 +78,7 @@ func handleOidcCallback(
 		RefreshToken: result.RefreshToken,
 		IdToken:      result.IdentityToken,
 		Claims:       claims,
-		Authority:    wellKnownConfig.Issuer,
+		Authority:    interactor.wellKnownConfig.Issuer,
 	}
 
 	tplErr := t.Execute(w, viewModel)
@@ -90,15 +88,8 @@ func handleOidcCallback(
 		return
 	}
 
-	jsonData, jsonErr := json.MarshalIndent(result, "", "    ")
-
-	if jsonErr != nil {
-		renderAndLogError(w, cancel, fmt.Sprintf("%v", jsonErr))
-		return
-	}
-
 	log.Print("Storing tokens in local keychain")
-	_, tokenSaveErr := db.SaveTokens(clientName, string(jsonData))
+	_, tokenSaveErr := interactor.database.SaveTokens(clientName, result)
 
 	// Can fail with warning
 	if tokenSaveErr != nil {
@@ -108,7 +99,14 @@ func handleOidcCallback(
 		)
 	}
 
-	_, finalWriteErr := fmt.Fprintf(os.Stdout, string(jsonData))
+	jsonData, jsonMarsallErr := json.MarshalIndent(result, "", "    ")
+
+	if jsonMarsallErr != nil {
+		renderAndLogError(w, cancel, fmt.Sprintf("%v", jsonMarsallErr))
+		return
+	}
+
+	_, finalWriteErr := fmt.Fprintln(os.Stdout, string(jsonData))
 
 	if finalWriteErr != nil {
 		renderAndLogError(w, cancel, fmt.Sprintf("%v", finalWriteErr))
