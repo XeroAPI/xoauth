@@ -71,7 +71,7 @@ func PrintJson(tokenSet oidc.TokenResultSet) {
 		log.Fatalln(tokenSerialisedErr)
 	}
 
-	log.Printf("%s", tokenSerialised)
+	fmt.Fprintf(os.Stdout, "%s", tokenSerialised)
 }
 
 func Refresh(database *db.CredentialStore, clientName string, tokenSet oidc.TokenResultSet) (oidc.TokenResultSet, error) {
