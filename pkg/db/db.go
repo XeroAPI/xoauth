@@ -138,8 +138,12 @@ func (store *CredentialStore) GetClientWithSecret(allClients map[string]OidcClie
 
 func (store *CredentialStore) GetClientWithoutSecret(allClients map[string]OidcClient, name string) (OidcClient, error) {
 	var client OidcClient
-	client = allClients[name]
-	return client, nil
+
+	if client, ok := allClients[name]; ok {
+		return client, nil
+	}
+
+	return client, errors.New("connection not found")
 }
 
 func (store *CredentialStore) ClientExists(name string) (bool, error) {
