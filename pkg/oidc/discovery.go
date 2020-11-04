@@ -18,7 +18,7 @@ func GetSchemeAndHost(urlString string) (string, error) {
 		return "", err
 	}
 
-	return fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host), nil
+	return fmt.Sprintf("%s://%s%s", parsed.Scheme, parsed.Host, parsed.Path), nil
 }
 
 
