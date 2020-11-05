@@ -222,6 +222,9 @@ You may want to delete this file if problems persist.
 #### Entries in the OS Keychain
 Client secrets are saved as application passwords under the common name `com.xero.xoauth`
 
+## Further reading
+
+https://github.com/JWealthall/XeroOAuth2ApiPkceHowTo - an example created by a Xero user @JWealthall that uses XOAuth within a PKCE app
 
 ## Contributing
 
