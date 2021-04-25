@@ -1,4 +1,4 @@
-# XOAuth
+# XOAuth - apple silicon m1 build included manually
 
 > Get OpenId Connect tokens from the command line
 
@@ -22,7 +22,8 @@ This tool saves you time, by:
 ## Installation
 Download the binary for your platform:
 * [Linux](https://github.com/XeroAPI/xoauth/releases/download/v1.1.0/xoauth_1.1.0_linux_amd64.tar.gz)
-* [Mac OS](https://github.com/XeroAPI/xoauth/releases/download/v1.1.0/xoauth_1.1.0_darwin_amd64.tar.gz)
+* [Mac OS x86_64](https://github.com/XeroAPI/xoauth/releases/download/v1.1.0/xoauth_1.1.0_darwin_amd64.tar.gz)
+* [Mac OS arm64](https://github.com/tilhoft/xoauth/releases/download/v1.1.0_m1/xoauth_1.1.0_darwin_arm64.tar.gz)
 * [Windows](https://github.com/XeroAPI/xoauth/releases/download/v1.1.0/xoauth_1.1.0_windows_amd64.tar.gz)
 
 You can run the binary directly:
@@ -37,7 +38,7 @@ Or add it to your OS `PATH`:
 mv xoauth /usr/local/bin/xoauth && chmod +x /usr/local/bin/xoauth
 ```
 
-Alternatively you can use `brew` on Mac OS:
+Alternatively you can use `brew` on Mac OS for x86:
 
 ```
 brew tap xeroapi/homebrew-taps
