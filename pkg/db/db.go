@@ -245,10 +245,13 @@ func (store *CredentialStore) DeleteClient(clientName string) (bool, error) {
 		return false, errors.New("the client does not exist")
 	}
 
-	_, keyringErr := store.DeleteClientSecret(clientName)
+	// PKCE clients don't have secrets, so skip this step if there's no secret.
+	if clients[clientName].GrantType != oidc.PKCE {
+		_, keyringErr := store.DeleteClientSecret(clientName)
 
-	if keyringErr != nil {
-		return false, keyringErr
+		if keyringErr != nil {
+			return false, keyringErr
+		}
 	}
 
 	tokenErr := store.DeleteTokens(clientName)
