@@ -15,7 +15,7 @@ import (
 
 const testKeyID = "test-signing-key"
 
-func TestValidateTokenValidatesAudienceIssuerAndSignature(t *testing.T) {
+func TestValidateIDTokenValidatesAudienceIssuerAndSignature(t *testing.T) {
 	trustedKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate trusted RSA key: %v", err)
@@ -33,17 +33,25 @@ func TestValidateTokenValidatesAudienceIssuerAndSignature(t *testing.T) {
 	const issuer = "https://issuer.example"
 
 	tests := []struct {
-		name       string
-		audience   interface{}
-		issuer     string
-		signingKey *rsa.PrivateKey
-		wantErr    bool
+		name            string
+		audience        interface{}
+		authorizedParty interface{}
+		issuer          string
+		signingKey      *rsa.PrivateKey
+		wantErr         bool
 	}{
 		{
 			name:       "accepts matching audience",
 			audience:   clientID,
 			issuer:     issuer,
 			signingKey: trustedKey,
+		},
+		{
+			name:            "accepts multiple audiences with matching authorized party",
+			audience:        []string{clientID, "another-client"},
+			authorizedParty: clientID,
+			issuer:          issuer,
+			signingKey:      trustedKey,
 		},
 		{
 			name:       "rejects mismatched audience",
@@ -57,6 +65,21 @@ func TestValidateTokenValidatesAudienceIssuerAndSignature(t *testing.T) {
 			issuer:     issuer,
 			signingKey: trustedKey,
 			wantErr:    true,
+		},
+		{
+			name:       "rejects multiple audiences without an authorized party",
+			audience:   []string{clientID, "another-client"},
+			issuer:     issuer,
+			signingKey: trustedKey,
+			wantErr:    true,
+		},
+		{
+			name:            "rejects mismatched authorized party",
+			audience:        []string{clientID, "another-client"},
+			authorizedParty: "another-client",
+			issuer:          issuer,
+			signingKey:      trustedKey,
+			wantErr:         true,
 		},
 		{
 			name:       "rejects mismatched issuer",
@@ -76,9 +99,9 @@ func TestValidateTokenValidatesAudienceIssuerAndSignature(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tokenString := signedIDToken(t, tt.signingKey, tt.issuer, tt.audience)
+			tokenString := signedIDToken(t, tt.signingKey, tt.issuer, tt.audience, tt.authorizedParty)
 
-			claims, err := ValidateToken(tokenString, configuration, clientID)
+			claims, err := ValidateIDToken(tokenString, configuration, clientID)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("ValidateToken() error = nil, want non-nil error")
@@ -94,10 +117,32 @@ func TestValidateTokenValidatesAudienceIssuerAndSignature(t *testing.T) {
 			if !ok {
 				t.Fatalf("ValidateToken() claims type = %T, want jwt.MapClaims", claims)
 			}
-			if got := mapClaims["aud"]; got != clientID {
-				t.Fatalf("ValidateToken() audience = %v, want %q", got, clientID)
+			if got := mapClaims["aud"]; got == nil {
+				t.Fatal("ValidateIDToken() audience = nil, want a client audience")
 			}
 		})
+	}
+}
+
+func TestValidateTokenDoesNotRequireClientIDAudienceForAccessTokens(t *testing.T) {
+	trustedKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate trusted RSA key: %v", err)
+	}
+
+	configuration, closeJWKS := testWellKnownConfiguration(t, &trustedKey.PublicKey)
+	defer closeJWKS()
+
+	accessToken := signedIDToken(
+		t,
+		trustedKey,
+		"https://issuer.example",
+		"https://identity.xero.com/resources",
+		nil,
+	)
+
+	if _, err := ValidateToken(accessToken, configuration, "expected-client"); err != nil {
+		t.Fatalf("ValidateToken() error = %v, want nil for a valid access token", err)
 	}
 }
 
@@ -130,7 +175,7 @@ func testWellKnownConfiguration(t *testing.T, publicKey *rsa.PublicKey) (WellKno
 	}, server.Close
 }
 
-func signedIDToken(t *testing.T, signingKey *rsa.PrivateKey, issuer string, audience interface{}) string {
+func signedIDToken(t *testing.T, signingKey *rsa.PrivateKey, issuer string, audience interface{}, authorizedParty interface{}) string {
 	t.Helper()
 
 	claims := jwt.MapClaims{
@@ -139,6 +184,9 @@ func signedIDToken(t *testing.T, signingKey *rsa.PrivateKey, issuer string, audi
 	}
 	if audience != nil {
 		claims["aud"] = audience
+	}
+	if authorizedParty != nil {
+		claims["azp"] = authorizedParty
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)

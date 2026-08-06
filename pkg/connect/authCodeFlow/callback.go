@@ -58,7 +58,7 @@ func (interactor *CodeFlowInteractor) handleOidcCallback(
 
 	log.Println("Validating token")
 
-	var claims, validateErr = oidc.ValidateToken(result.IdentityToken, interactor.wellKnownConfig, clientId)
+	var claims, validateErr = oidc.ValidateIDToken(result.IdentityToken, interactor.wellKnownConfig, clientId)
 
 	if validateErr != nil {
 		renderAndLogError(w, cancel, fmt.Sprintf("%v", validateErr))

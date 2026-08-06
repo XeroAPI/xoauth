@@ -49,13 +49,31 @@ func getKeyValidatorFunc(keys *jwk.Set) func(token *jwt.Token) (interface{}, err
 	}
 }
 
+// ValidateToken verifies the signature, issuer, and time-based claims of a
+// JWT. It deliberately does not apply a client-ID audience check because this
+// helper is also used for OAuth access tokens, whose audience is a resource
+// server rather than the OAuth client.
+//
+// The clientId argument is retained for backwards compatibility with existing
+// callers. Use ValidateIDToken when validating an OpenID Connect ID token.
 func ValidateToken(tokenString string, configuration WellKnownConfiguration, clientId string) (interface{}, error) {
-	// Allow up to five minutes of clock skew
-	var clockToleranceSeconds = 300 * time.Second
+	return validateToken(tokenString, configuration, "")
+}
 
+// ValidateIDToken verifies an OpenID Connect ID token, including that its aud
+// claim contains the relying-party client ID. For multi-audience ID tokens, it
+// also requires azp to identify the same client.
+func ValidateIDToken(tokenString string, configuration WellKnownConfiguration, clientId string) (interface{}, error) {
 	if clientId == "" {
 		return nil, errors.New("client id is required for id token audience validation")
 	}
+
+	return validateToken(tokenString, configuration, clientId)
+}
+
+func validateToken(tokenString string, configuration WellKnownConfiguration, expectedAudience string) (interface{}, error) {
+	// Allow up to five minutes of clock skew
+	var clockToleranceSeconds = 300 * time.Second
 
 	keys, jwksError := jwk.FetchHTTP(configuration.JwksUri)
 
@@ -63,7 +81,18 @@ func ValidateToken(tokenString string, configuration WellKnownConfiguration, cli
 		return nil, errors.New("expecting JWT header to have string kid")
 	}
 
-	token, tokenErr := jwt.Parse(tokenString, getKeyValidatorFunc(keys), jwt.WithLeeway(clockToleranceSeconds), jwt.WithAudience(clientId), jwt.WithIssuer(configuration.Issuer))
+	parserOptions := []jwt.ParserOption{
+		jwt.WithLeeway(clockToleranceSeconds),
+		jwt.WithIssuer(configuration.Issuer),
+	}
+
+	if expectedAudience == "" {
+		parserOptions = append(parserOptions, jwt.WithoutAudienceValidation())
+	} else {
+		parserOptions = append(parserOptions, jwt.WithAudience(expectedAudience))
+	}
+
+	token, tokenErr := jwt.Parse(tokenString, getKeyValidatorFunc(keys), parserOptions...)
 
 	if tokenErr != nil {
 		return nil, tokenErr
@@ -79,11 +108,40 @@ func ValidateToken(tokenString string, configuration WellKnownConfiguration, cli
 		return nil, errors.New("the JWT was invalid")
 	}
 
-	// jwt-go validates an audience only when the claim is present. An OIDC ID
-	// token must include an audience, so reject tokens that omit it entirely.
-	if audience, ok := claims["aud"]; !ok || audience == nil {
-		return nil, errors.New("the JWT did not include an audience claim")
+	if expectedAudience != "" {
+		// jwt-go validates an audience only when the claim is present. An OIDC
+		// ID token must include an audience, so reject tokens that omit it.
+		if audience, ok := claims["aud"]; !ok || audience == nil {
+			return nil, errors.New("the JWT did not include an audience claim")
+		}
+
+		if err := validateAuthorizedParty(claims, expectedAudience); err != nil {
+			return nil, err
+		}
 	}
 
 	return claims, nil
+}
+
+func validateAuthorizedParty(claims jwt.MapClaims, clientId string) error {
+	audience, err := jwt.ParseClaimStrings(claims["aud"])
+	if err != nil {
+		return errors.New("the JWT included an invalid audience claim")
+	}
+
+	authorizedParty, authorizedPartyPresent := claims["azp"]
+	if len(audience) > 1 && !authorizedPartyPresent {
+		return errors.New("the JWT included multiple audiences without an authorized party claim")
+	}
+
+	if !authorizedPartyPresent {
+		return nil
+	}
+
+	authorizedPartyString, ok := authorizedParty.(string)
+	if !ok || authorizedPartyString != clientId {
+		return errors.New("the JWT authorized party did not match the client id")
+	}
+
+	return nil
 }
