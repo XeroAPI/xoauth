@@ -53,13 +53,17 @@ func ValidateToken(tokenString string, configuration WellKnownConfiguration, cli
 	// Allow up to five minutes of clock skew
 	var clockToleranceSeconds = 300 * time.Second
 
+	if clientId == "" {
+		return nil, errors.New("client id is required for id token audience validation")
+	}
+
 	keys, jwksError := jwk.FetchHTTP(configuration.JwksUri)
 
 	if jwksError != nil {
 		return nil, errors.New("expecting JWT header to have string kid")
 	}
 
-	token, tokenErr := jwt.Parse(tokenString, getKeyValidatorFunc(keys), jwt.WithLeeway(clockToleranceSeconds), jwt.WithoutAudienceValidation(), jwt.WithIssuer(configuration.Issuer))
+	token, tokenErr := jwt.Parse(tokenString, getKeyValidatorFunc(keys), jwt.WithLeeway(clockToleranceSeconds), jwt.WithAudience(clientId), jwt.WithIssuer(configuration.Issuer))
 
 	if tokenErr != nil {
 		return nil, tokenErr
@@ -73,6 +77,12 @@ func ValidateToken(tokenString string, configuration WellKnownConfiguration, cli
 
 	if !token.Valid {
 		return nil, errors.New("the JWT was invalid")
+	}
+
+	// jwt-go validates an audience only when the claim is present. An OIDC ID
+	// token must include an audience, so reject tokens that omit it entirely.
+	if audience, ok := claims["aud"]; !ok || audience == nil {
+		return nil, errors.New("the JWT did not include an audience claim")
 	}
 
 	return claims, nil
