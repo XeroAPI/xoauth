@@ -1,6 +1,7 @@
 package oidc
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -10,12 +11,12 @@ import (
 	"github.com/lestrrat-go/jwx/jwk"
 )
 
-func lookUpKey(keyId string, keys *jwk.Set) (interface{}, error) {
+func lookUpKey(keyId string, keys jwk.Set) (interface{}, error) {
 
-	if key := keys.LookupKeyID(keyId); len(key) == 1 {
+	if key, ok := keys.LookupKeyID(keyId); ok {
 		var rawKey interface{}
 
-		if err := key[0].Raw(&rawKey); err != nil {
+		if err := key.Raw(&rawKey); err != nil {
 			return rawKey, err
 		}
 
@@ -25,7 +26,7 @@ func lookUpKey(keyId string, keys *jwk.Set) (interface{}, error) {
 	return nil, errors.New(fmt.Sprintf("unable to find key with id %s", keyId))
 }
 
-func getKeyValidatorFunc(keys *jwk.Set) func(token *jwt.Token) (interface{}, error) {
+func getKeyValidatorFunc(keys jwk.Set) func(token *jwt.Token) (interface{}, error) {
 	return func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -53,7 +54,7 @@ func ValidateToken(tokenString string, configuration WellKnownConfiguration, cli
 	// Allow up to five minutes of clock skew
 	var clockToleranceSeconds = 300 * time.Second
 
-	keys, jwksError := jwk.FetchHTTP(configuration.JwksUri)
+	keys, jwksError := jwk.Fetch(context.Background(), configuration.JwksUri)
 
 	if jwksError != nil {
 		return nil, errors.New("expecting JWT header to have string kid")
