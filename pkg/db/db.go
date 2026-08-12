@@ -18,6 +18,11 @@ import (
 const ConfigDirPath = ".xoauth"
 const ConfigFileName = "xoauth.json"
 
+var statFile = os.Stat
+var renameFile = os.Rename
+var removeFile = os.Remove
+var userHomeDir = os.UserHomeDir
+
 type OidcClient struct {
 	Authority    string
 	Alias        string
@@ -48,7 +53,15 @@ func (store *CredentialStore) EnsureDbExists() error {
 		return pathErr
 	}
 
-	if !fileExists(fileName) {
+	if recoveryErr := recoverConfigFile(fileName); recoveryErr != nil {
+		return recoveryErr
+	}
+
+	exists, statErr := fileExists(fileName)
+	if statErr != nil {
+		return statErr
+	}
+	if !exists {
 		var seedClients = map[string]OidcClient{}
 
 		err := store.writeClients(seedClients)
@@ -61,12 +74,18 @@ func (store *CredentialStore) EnsureDbExists() error {
 	return nil
 }
 
-func fileExists(filename string) bool {
-	info, err := os.Stat(filename)
-	if err != nil {
-		return false
+func fileExists(filename string) (bool, error) {
+	info, err := statFile(filename)
+	if os.IsNotExist(err) {
+		return false, nil
 	}
-	return !info.IsDir()
+	if err != nil {
+		return false, err
+	}
+	if info.IsDir() {
+		return false, fmt.Errorf("config path is a directory: %s", filename)
+	}
+	return true, nil
 }
 
 func ensurePathExists(directory string) error {
@@ -81,7 +100,7 @@ func ensurePathExists(directory string) error {
 }
 
 func (store *CredentialStore) getDbFile() string {
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 
 	if err != nil {
 		log.Fatal(err)
@@ -96,7 +115,14 @@ func (store *CredentialStore) GetClients() (map[string]OidcClient, error) {
 	var clients = make(map[string]OidcClient)
 	var file = store.getDbFile()
 
-	if !fileExists(file) {
+	if recoveryErr := recoverConfigFile(file); recoveryErr != nil {
+		return nil, recoveryErr
+	}
+	exists, statErr := fileExists(file)
+	if statErr != nil {
+		return nil, statErr
+	}
+	if !exists {
 		return clients, nil
 	}
 
@@ -207,37 +233,58 @@ func writeClientsFile(fileName string, clients map[string]OidcClient) error {
 }
 
 func replaceConfigFile(temporaryName string, fileName string) error {
-	if renameErr := os.Rename(temporaryName, fileName); renameErr == nil {
+	if recoveryErr := recoverConfigFile(fileName); recoveryErr != nil {
+		return recoveryErr
+	}
+
+	if renameErr := renameFile(temporaryName, fileName); renameErr == nil {
 		return nil
+	} else {
+		exists, statErr := fileExists(fileName)
+		if statErr != nil {
+			return fmt.Errorf("replace config file: %v", statErr)
+		}
+		if !exists {
+			return fmt.Errorf("replace config file: %v", renameErr)
+		}
 	}
 
-	if _, statErr := os.Stat(fileName); statErr != nil {
-		return fmt.Errorf("replace config file: %v", statErr)
-	}
-
-	backup, backupErr := ioutil.TempFile(filepath.Dir(fileName), ".xoauth-backup-*.tmp")
-	if backupErr != nil {
-		return backupErr
-	}
-	backupName := backup.Name()
-	if closeErr := backup.Close(); closeErr != nil {
-		return closeErr
-	}
-	if removeErr := os.Remove(backupName); removeErr != nil {
-		return removeErr
-	}
-
-	if renameErr := os.Rename(fileName, backupName); renameErr != nil {
+	backupName := configBackupName(fileName)
+	if renameErr := renameFile(fileName, backupName); renameErr != nil {
 		return renameErr
 	}
-	if renameErr := os.Rename(temporaryName, fileName); renameErr != nil {
-		if rollbackErr := os.Rename(backupName, fileName); rollbackErr != nil {
+	if renameErr := renameFile(temporaryName, fileName); renameErr != nil {
+		if rollbackErr := renameFile(backupName, fileName); rollbackErr != nil {
 			return fmt.Errorf("replace config file: %v; rollback failed: %v", renameErr, rollbackErr)
 		}
 		return renameErr
 	}
 
-	return os.Remove(backupName)
+	return removeFile(backupName)
+}
+
+func configBackupName(fileName string) string {
+	return fileName + ".backup"
+}
+
+func recoverConfigFile(fileName string) error {
+	backupName := configBackupName(fileName)
+	targetExists, targetErr := fileExists(fileName)
+	if targetErr != nil {
+		return targetErr
+	}
+	backupExists, backupErr := fileExists(backupName)
+	if backupErr != nil {
+		return backupErr
+	}
+
+	if targetExists && backupExists {
+		return removeFile(backupName)
+	}
+	if !targetExists && backupExists {
+		return renameFile(backupName, fileName)
+	}
+	return nil
 }
 
 func (store *CredentialStore) SaveClientMetadata(client OidcClient) (bool, error) {
