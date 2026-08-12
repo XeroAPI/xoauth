@@ -44,23 +44,48 @@ func ShowTokens(database *db.CredentialStore, clientName string, exportToEnv boo
 }
 
 func PrintEnvVars(clientName string, tokenSet oidc.TokenResultSet) {
-	var envName = strings.ToUpper(strings.ReplaceAll(clientName, "-", "_"))
-
-	str := fmt.Sprintf(
-		"export %s_ACCESS_TOKEN=%s %s_ID_TOKEN=%s %s_REFRESH_TOKEN=%s",
-		envName,
-		tokenSet.AccessToken,
-		envName,
-		tokenSet.IdentityToken,
-		envName,
-		tokenSet.RefreshToken,
-	)
-
-	_, printErr := fmt.Fprint(os.Stdout, str)
+	_, printErr := fmt.Fprint(os.Stdout, FormatEnvVars(clientName, tokenSet))
 
 	if printErr != nil {
 		log.Fatalln(printErr)
 	}
+}
+
+func FormatEnvVars(clientName string, tokenSet oidc.TokenResultSet) string {
+	envName := normaliseEnvName(clientName)
+
+	return fmt.Sprintf(
+		"export %s_ACCESS_TOKEN=%s\nexport %s_ID_TOKEN=%s\nexport %s_REFRESH_TOKEN=%s",
+		envName,
+		shellQuote(tokenSet.AccessToken),
+		envName,
+		shellQuote(tokenSet.IdentityToken),
+		envName,
+		shellQuote(tokenSet.RefreshToken),
+	)
+}
+
+func normaliseEnvName(clientName string) string {
+	name := strings.Map(func(value rune) rune {
+		if value >= 'a' && value <= 'z' {
+			return value - ('a' - 'A')
+		}
+		if (value >= 'A' && value <= 'Z') || (value >= '0' && value <= '9') || value == '_' {
+			return value
+		}
+		return '_'
+	}, clientName)
+	if name == "" {
+		return "XOAUTH"
+	}
+	if name[0] >= '0' && name[0] <= '9' {
+		return "_" + name
+	}
+	return name
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 
 func PrintJson(tokenSet oidc.TokenResultSet) {
