@@ -10,21 +10,28 @@ import (
 	"time"
 )
 
-func TestAbsoluteExpiryAppliesClockSkew(t *testing.T) {
+func TestAbsoluteExpiryCapsClockSkewForShortLivedTokens(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
-	want := now.Add(29 * time.Minute).Unix()
-
-	if got := AbsoluteExpiry(now, 30*60); got != want {
-		t.Fatalf("AbsoluteExpiry() = %d, want %d", got, want)
+	tests := []struct {
+		name      string
+		expiresIn int
+		want      time.Duration
+	}{
+		{name: "zero", expiresIn: 0, want: 0},
+		{name: "negative", expiresIn: -30, want: 0},
+		{name: "30 seconds", expiresIn: 30, want: 15 * time.Second},
+		{name: "60 seconds", expiresIn: 60, want: 30 * time.Second},
+		{name: "61 seconds", expiresIn: 61, want: 30 * time.Second},
+		{name: "30 minutes", expiresIn: 30 * 60, want: 29 * time.Minute},
 	}
-}
 
-func TestAbsoluteExpiryDoesNotExpireShortLivedTokenImmediately(t *testing.T) {
-	now := time.Unix(1_700_000_000, 0)
-	want := now.Add(30 * time.Second).Unix()
-
-	if got := AbsoluteExpiry(now, 30); got != want {
-		t.Fatalf("AbsoluteExpiry() = %d, want %d", got, want)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			want := now.Add(test.want).Unix()
+			if got := AbsoluteExpiry(now, test.expiresIn); got != want {
+				t.Fatalf("AbsoluteExpiry() = %d, want %d", got, want)
+			}
+		})
 	}
 }
 

@@ -193,12 +193,15 @@ func RequestWithClientCredentials(tokenEndpoint string, clientId string, clientS
 func AbsoluteExpiry(now time.Time, expiresIn int) int64 {
 	// ExpiresIn returns expiry time in seconds
 	lifetime := time.Second * time.Duration(expiresIn)
-	var future = now.Add(lifetime)
-	// Subtract a minute to account for clock skew etc
-	if lifetime > time.Minute {
-		future = future.Add(-time.Minute)
+	if lifetime <= 0 {
+		return now.Unix()
 	}
-	return future.Unix()
+	// Account for clock skew without consuming an entire short token lifetime.
+	skew := lifetime / 2
+	if skew > time.Minute {
+		skew = time.Minute
+	}
+	return now.Add(lifetime - skew).Unix()
 }
 
 type CodeVerifier struct {
