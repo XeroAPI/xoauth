@@ -12,12 +12,16 @@ import (
 type WindowsKeyRingService struct {
 }
 
+var windowsKeyringSet = keyring.Set
+var windowsKeyringGet = keyring.Get
+var windowsKeyringDelete = keyring.Delete
+
 func NewWindowsKeyRingService(debug bool) (KeyRingService, error) {
 	return WindowsKeyRingService{}, nil
 }
 
 func (service WindowsKeyRingService) Set(item string, value string) error {
-	err := keyring.Set(KeyRingServiceName, item, value)
+	err := windowsKeyringSet(KeyRingServiceName, item, value)
 
 	if err != nil {
 		return err
@@ -27,7 +31,7 @@ func (service WindowsKeyRingService) Set(item string, value string) error {
 }
 
 func (service WindowsKeyRingService) Get(item string) (string, error) {
-	result, err := keyring.Get(KeyRingServiceName, item)
+	result, err := windowsKeyringGet(KeyRingServiceName, item)
 
 	if err != nil {
 		return "", err
@@ -37,38 +41,35 @@ func (service WindowsKeyRingService) Get(item string) (string, error) {
 }
 
 func (service WindowsKeyRingService) Delete(item string) error {
-
-	err := keyring.Delete(KeyRingServiceName, fmt.Sprintf("%s.identity", item))
-	err = keyring.Delete(KeyRingServiceName, fmt.Sprintf("%s.refresh", item))
-	err = keyring.Delete(KeyRingServiceName, fmt.Sprintf("%s.access", item))
-	err = keyring.Delete(KeyRingServiceName, fmt.Sprintf("%s.expiry", item))
-
-	if err != nil {
-		return err
-	}
-
-	return keyring.Delete(KeyRingServiceName, item)
+	return deleteWindowsCredentials(
+		fmt.Sprintf("%s.identity", item),
+		fmt.Sprintf("%s.refresh", item),
+		fmt.Sprintf("%s.access", item),
+		fmt.Sprintf("%s.expiry", item),
+		item,
+	)
 }
 
 // Windows Cred store 2.5kb limit requires us to reassemble the token set
 func (service WindowsKeyRingService) GetTokens(item string) (oidc.TokenResultSet, error) {
 	var result oidc.TokenResultSet
-	var err error
-
 	// id_token and refresh may not be present in all cases (e.g, client creds)
-	identity, err := service.Get(fmt.Sprintf("%s.identity", item))
-	refresh, err := service.Get(fmt.Sprintf("%s.refresh", item))
-
-	// Since these params are optional, ignore not found errors
-	if err.Error() != keyring.ErrNotFound.Error() {
+	identity, err := getOptionalWindowsCredential(service, fmt.Sprintf("%s.identity", item))
+	if err != nil {
+		return result, err
+	}
+	refresh, err := getOptionalWindowsCredential(service, fmt.Sprintf("%s.refresh", item))
+	if err != nil {
 		return result, err
 	}
 
 	// We can't proceed without an access_token, so here we exit
 	// if we can't obtain one.
 	access, err := service.Get(fmt.Sprintf("%s.access", item))
+	if err != nil {
+		return result, err
+	}
 	expiry, err := service.Get(fmt.Sprintf("%s.expiry", item))
-
 	if err != nil {
 		return result, err
 	}
@@ -120,7 +121,7 @@ func (service WindowsKeyRingService) SetTokens(item string, tokens oidc.TokenRes
 	}
 
 	if tokens.ExpiresAt != 0 {
-		service.Set(fmt.Sprintf("%s.expiry", item), strconv.FormatInt(tokens.ExpiresAt, 10))
+		err = service.Set(fmt.Sprintf("%s.expiry", item), strconv.FormatInt(tokens.ExpiresAt, 10))
 		if err != nil {
 			return err
 		}
@@ -130,10 +131,29 @@ func (service WindowsKeyRingService) SetTokens(item string, tokens oidc.TokenRes
 }
 
 func (service WindowsKeyRingService) DeleteTokens(item string) error {
-	err := keyring.Delete(KeyRingServiceName, fmt.Sprintf("%s.identity", item))
-	err = keyring.Delete(KeyRingServiceName, fmt.Sprintf("%s.refresh", item))
-	err = keyring.Delete(KeyRingServiceName, fmt.Sprintf("%s.access", item))
-	err = keyring.Delete(KeyRingServiceName, fmt.Sprintf("%s.expiry", item))
+	return deleteWindowsCredentials(
+		fmt.Sprintf("%s.identity", item),
+		fmt.Sprintf("%s.refresh", item),
+		fmt.Sprintf("%s.access", item),
+		fmt.Sprintf("%s.expiry", item),
+	)
+}
 
-	return err
+func getOptionalWindowsCredential(service WindowsKeyRingService, item string) (string, error) {
+	value, err := service.Get(item)
+	if err == keyring.ErrNotFound {
+		return "", nil
+	}
+	return value, err
+}
+
+func deleteWindowsCredentials(items ...string) error {
+	var firstErr error
+	for _, item := range items {
+		err := windowsKeyringDelete(KeyRingServiceName, item)
+		if err != nil && err != keyring.ErrNotFound && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
