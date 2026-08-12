@@ -1,6 +1,7 @@
 package oidc
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -51,6 +52,35 @@ func TestFormPostRedactsTokenEndpointDescription(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "refresh-token-secret") {
 		t.Fatalf("FormPost() exposed the endpoint error description: %q", err)
+	}
+}
+
+func TestFormPostRejectsUnsafeTokenEndpointErrorCodes(t *testing.T) {
+	tests := []struct {
+		name      string
+		errorCode string
+	}{
+		{name: "control characters", errorCode: "invalid_grant\r\nrefresh-token-secret"},
+		{name: "quoted secret echo", errorCode: `invalid_grant\"refresh-token-secret`},
+		{name: "overlong value", errorCode: strings.Repeat("refresh-token-secret", 4)},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": test.errorCode})
+			}))
+			defer server.Close()
+
+			err := FormPost(server.URL, "client", "secret", url.Values{}, &TokenResultSet{})
+			if err == nil || err.Error() != "token endpoint returned status 400" {
+				t.Fatalf("FormPost() error = %q, want generic status only", err)
+			}
+			if strings.Contains(err.Error(), "refresh-token-secret") {
+				t.Fatalf("FormPost() exposed an unsafe endpoint error value: %q", err)
+			}
+		})
 	}
 }
 

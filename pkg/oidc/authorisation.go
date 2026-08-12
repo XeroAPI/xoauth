@@ -14,6 +14,7 @@ import (
 )
 
 const maxOIDCResponseBytes = 1024 * 1024
+const maxOAuthErrorCodeBytes = 64
 
 var oidcHTTPClient = &http.Client{Timeout: 15 * time.Second}
 var tokenHTTPClient = &http.Client{
@@ -126,7 +127,7 @@ func FormPost(tokenEndpoint string, clientId string, clientSecret string, formDa
 		var endpointError struct {
 			Error string `json:"error"`
 		}
-		if json.Unmarshal(body, &endpointError) == nil && endpointError.Error != "" {
+		if json.Unmarshal(body, &endpointError) == nil && safeOAuthErrorCode(endpointError.Error) {
 			return fmt.Errorf("token endpoint returned status %d: %s", response.StatusCode, endpointError.Error)
 		}
 		return fmt.Errorf("token endpoint returned status %d", response.StatusCode)
@@ -137,6 +138,24 @@ func FormPost(tokenEndpoint string, clientId string, clientSecret string, formDa
 	}
 
 	return nil
+}
+
+func safeOAuthErrorCode(value string) bool {
+	if len(value) == 0 || len(value) > maxOAuthErrorCodeBytes {
+		return false
+	}
+	for index := 0; index < len(value); index++ {
+		if !isOAuthNQSChar(value[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+func isOAuthNQSChar(character byte) bool {
+	return character == 0x20 || character == 0x21 ||
+		(character >= 0x23 && character <= 0x5b) ||
+		(character >= 0x5d && character <= 0x7e)
 }
 
 func ExchangeCodeForToken(tokenEndpoint string, code string, clientId string, clientSecret string, codeVerifier string, redirectUri string) (TokenResultSet, error) {
