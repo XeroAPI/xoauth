@@ -3,13 +3,13 @@ package oidc
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
-	"net/http"
 	"net/url"
 )
 
 const WellKnownPath = "/.well-known/openid-configuration"
-
 
 func GetSchemeAndHost(urlString string) (string, error) {
 	parsed, err := url.Parse(urlString)
@@ -21,14 +21,12 @@ func GetSchemeAndHost(urlString string) (string, error) {
 	return fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host), nil
 }
 
-
-type WellKnownConfiguration struct{
+type WellKnownConfiguration struct {
 	AuthorisationEndpoint string `json:"authorization_endpoint"`
-	TokenEndpoint string `json:"token_endpoint"`
-	JwksUri string `json:"jwks_uri"`
-	Issuer string `json:"issuer"`
+	TokenEndpoint         string `json:"token_endpoint"`
+	JwksUri               string `json:"jwks_uri"`
+	Issuer                string `json:"issuer"`
 }
-
 
 func GetMetadata(authority string) (WellKnownConfiguration, error) {
 	var authorityBaseUrl, parseErr = GetSchemeAndHost(authority)
@@ -42,20 +40,25 @@ func GetMetadata(authority string) (WellKnownConfiguration, error) {
 
 	log.Printf("Requesting OIDC metadata from %s\n", wellKnownUrl)
 
-	response, requestErr := http.Get(wellKnownUrl)
+	response, requestErr := oidcHTTPClient.Get(wellKnownUrl)
 
 	if requestErr != nil {
 		return result, requestErr
 	}
+	defer response.Body.Close()
 
 	if response.StatusCode != 200 {
 		return result, fmt.Errorf("got %d when requesting %s", response.StatusCode, wellKnownUrl)
 	}
 
-	decoder := json.NewDecoder(response.Body)
-	decodeErr := decoder.Decode(&result)
-
-	if decodeErr != nil {
+	body, readErr := ioutil.ReadAll(io.LimitReader(response.Body, maxOIDCResponseBytes+1))
+	if readErr != nil {
+		return result, readErr
+	}
+	if len(body) > maxOIDCResponseBytes {
+		return result, fmt.Errorf("OIDC metadata exceeded 1 MiB")
+	}
+	if decodeErr := json.Unmarshal(body, &result); decodeErr != nil {
 		return result, decodeErr
 	}
 
@@ -71,4 +74,3 @@ func GetMetadata(authority string) (WellKnownConfiguration, error) {
 
 	return result, nil
 }
-

@@ -4,13 +4,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 )
+
+const maxOIDCResponseBytes = 1024 * 1024
+
+var oidcHTTPClient = &http.Client{Timeout: 15 * time.Second}
 
 type TokenResultSet struct {
 	AccessToken   string `json:"access_token"`
@@ -83,9 +88,6 @@ func ValidateAuthorisationResponse(url *url.URL, state string) (AuthorisationRes
 }
 
 func FormPost(tokenEndpoint string, clientId string, clientSecret string, formData url.Values, result interface{}) error {
-
-	client := &http.Client{}
-
 	encoded := formData.Encode()
 	request, requestBuildErr := http.NewRequest("POST", tokenEndpoint, strings.NewReader(encoded))
 
@@ -99,39 +101,33 @@ func FormPost(tokenEndpoint string, clientId string, clientSecret string, formDa
 		request.SetBasicAuth(clientId, clientSecret)
 	}
 
-	request.Header.Add("Content-Length", strconv.Itoa(len(encoded)))
-
-	response, responseErr := client.Do(request)
+	response, responseErr := oidcHTTPClient.Do(request)
 
 	if responseErr != nil {
-		return errors.New(fmt.Sprintf("Error POSTing code %v", responseErr))
+		return fmt.Errorf("post token request: %w", responseErr)
 	}
+	defer response.Body.Close()
 
-	decoder := json.NewDecoder(response.Body)
+	body, readErr := ioutil.ReadAll(io.LimitReader(response.Body, maxOIDCResponseBytes+1))
+	if readErr != nil {
+		return fmt.Errorf("read token response: %w", readErr)
+	}
+	if len(body) > maxOIDCResponseBytes {
+		return errors.New("token response exceeded 1 MiB")
+	}
 
 	if response.StatusCode != 200 {
-		var errorResult interface{}
-		endpointErr := decoder.Decode(&errorResult)
-
-		if endpointErr != nil {
-			return fmt.Errorf("received error from code endpoint, but unable to deserialise error message. statusCode: %d", response.StatusCode)
+		var endpointError struct {
+			Error string `json:"error"`
 		}
-
-		errorBody, errorBodyError := json.MarshalIndent(errorResult, "", " ")
-
-		if errorBodyError != nil {
-			return errorBodyError
+		if json.Unmarshal(body, &endpointError) == nil && endpointError.Error != "" {
+			return fmt.Errorf("token endpoint returned status %d: %s", response.StatusCode, endpointError.Error)
 		}
-
-		return fmt.Errorf("received error from code endpoint. statusCode: %d, body: %s",
-			response.StatusCode,
-			string(errorBody))
+		return fmt.Errorf("token endpoint returned status %d", response.StatusCode)
 	}
 
-	decodeErr := decoder.Decode(&result)
-
-	if decodeErr != nil {
-		return errors.New(fmt.Sprintf("failed to decode JSON %v", decodeErr))
+	if decodeErr := json.Unmarshal(body, result); decodeErr != nil {
+		return fmt.Errorf("decode token response: %w", decodeErr)
 	}
 
 	return nil
@@ -190,9 +186,12 @@ func RequestWithClientCredentials(tokenEndpoint string, clientId string, clientS
 
 func AbsoluteExpiry(now time.Time, expiresIn int) int64 {
 	// ExpiresIn returns expiry time in seconds
-	var future = now.Add(time.Second * time.Duration(expiresIn))
+	lifetime := time.Second * time.Duration(expiresIn)
+	var future = now.Add(lifetime)
 	// Subtract a minute to account for clock skew etc
-	future.Add(time.Minute * time.Duration(-1))
+	if lifetime > time.Minute {
+		future = future.Add(-time.Minute)
+	}
 	return future.Unix()
 }
 

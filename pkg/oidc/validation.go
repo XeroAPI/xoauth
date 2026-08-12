@@ -53,10 +53,10 @@ func ValidateToken(tokenString string, configuration WellKnownConfiguration, cli
 	// Allow up to five minutes of clock skew
 	var clockToleranceSeconds = 300 * time.Second
 
-	keys, jwksError := jwk.FetchHTTP(configuration.JwksUri)
+	keys, jwksError := jwk.FetchHTTP(configuration.JwksUri, jwk.WithHTTPClient(oidcHTTPClient))
 
 	if jwksError != nil {
-		return nil, errors.New("expecting JWT header to have string kid")
+		return nil, fmt.Errorf("fetch signing keys: %w", jwksError)
 	}
 
 	token, tokenErr := jwt.Parse(tokenString, getKeyValidatorFunc(keys), jwt.WithLeeway(clockToleranceSeconds), jwt.WithoutAudienceValidation(), jwt.WithIssuer(configuration.Issuer))
