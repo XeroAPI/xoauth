@@ -8,14 +8,36 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
+	"unicode"
 
 	"github.com/XeroAPI/xoauth/pkg/oidc"
 	"github.com/gookit/color"
 )
 
-// renderAndLogError prints the error message to the browser, then shut down the web server gracefully
+const maxCallbackErrorRunes = 512
+
+func sanitiseCallbackError(message string) string {
+	safe := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, message)
+	safe = strings.TrimSpace(safe)
+	if safe == "" {
+		return "unknown error"
+	}
+	runes := []rune(safe)
+	if len(runes) > maxCallbackErrorRunes {
+		safe = string(runes[:maxCallbackErrorRunes-3]) + "..."
+	}
+	return safe
+}
+
+// renderAndLogError logs a bounded, control-free diagnostic, returns a generic browser message, then shuts down the server.
 func renderAndLogError(w http.ResponseWriter, cancelFunc context.CancelFunc, errorMessage string) {
-	log.Printf("OIDC callback failed: %s", errorMessage)
+	log.Printf("OIDC callback failed: %s", sanitiseCallbackError(errorMessage))
 	http.Error(w, "Authentication failed. See the terminal for details.", http.StatusBadRequest)
 
 	cancelFunc()

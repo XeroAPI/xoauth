@@ -1,7 +1,9 @@
 package authCodeFlow
 
 import (
+	"bytes"
 	"html/template"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -43,6 +45,39 @@ func TestRenderAndLogErrorReturnsGenericBrowserMessage(t *testing.T) {
 	}
 	if strings.Contains(recorder.Body.String(), "sensitive endpoint detail") {
 		t.Fatalf("browser response exposed internal error: %q", recorder.Body.String())
+	}
+}
+
+func TestRenderAndLogErrorNormalisesAndBoundsLogMessage(t *testing.T) {
+	var output bytes.Buffer
+	previousOutput := log.Writer()
+	previousFlags := log.Flags()
+	previousPrefix := log.Prefix()
+	log.SetOutput(&output)
+	log.SetFlags(0)
+	log.SetPrefix("")
+	defer func() {
+		log.SetOutput(previousOutput)
+		log.SetFlags(previousFlags)
+		log.SetPrefix(previousPrefix)
+	}()
+
+	message := "useful detail\r\nforged log\x1b[31m" + strings.Repeat("x", maxCallbackErrorRunes)
+	renderAndLogError(httptest.NewRecorder(), func() {}, message)
+
+	logged := strings.TrimSuffix(output.String(), "\n")
+	if strings.ContainsAny(logged, "\r\n\x1b") {
+		t.Fatalf("log contains control characters: %q", logged)
+	}
+	if !strings.Contains(logged, "useful detail  forged log [31m") {
+		t.Fatalf("log discarded safe diagnostic text: %q", logged)
+	}
+	prefix := "OIDC callback failed: "
+	if got := len([]rune(strings.TrimPrefix(logged, prefix))); got != maxCallbackErrorRunes {
+		t.Fatalf("normalised message length = %d, want %d", got, maxCallbackErrorRunes)
+	}
+	if !strings.HasSuffix(logged, "...") {
+		t.Fatalf("bounded log message missing truncation marker: %q", logged)
 	}
 }
 
