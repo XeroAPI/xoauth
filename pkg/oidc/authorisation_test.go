@@ -67,12 +67,38 @@ func TestFormPostUsesBoundedHTTPClient(t *testing.T) {
 	}))
 	defer server.Close()
 
-	previousClient := oidcHTTPClient
-	oidcHTTPClient = &http.Client{Timeout: 20 * time.Millisecond}
-	defer func() { oidcHTTPClient = previousClient }()
+	previousClient := tokenHTTPClient
+	tokenHTTPClient = &http.Client{Timeout: 20 * time.Millisecond}
+	defer func() { tokenHTTPClient = previousClient }()
 
 	err := FormPost(server.URL, "client", "secret", url.Values{}, &TokenResultSet{})
 	if err == nil {
 		t.Fatal("FormPost() error = nil, want timeout error")
+	}
+}
+
+func TestFormPostDoesNotFollowRedirectsWithClientCredentials(t *testing.T) {
+	redirected := make(chan bool, 1)
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _, hasCredentials := r.BasicAuth()
+		redirected <- hasCredentials
+		fmt.Fprint(w, `{}`)
+	}))
+	defer target.Close()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
+	}))
+	defer server.Close()
+
+	err := FormPost(server.URL, "client", "secret", url.Values{}, &TokenResultSet{})
+	if err == nil || !strings.Contains(err.Error(), "status 307") {
+		t.Fatalf("FormPost() error = %v, want redirect status error", err)
+	}
+
+	select {
+	case hasCredentials := <-redirected:
+		t.Fatalf("FormPost() followed redirect; credentials present = %t", hasCredentials)
+	default:
 	}
 }

@@ -16,6 +16,12 @@ import (
 const maxOIDCResponseBytes = 1024 * 1024
 
 var oidcHTTPClient = &http.Client{Timeout: 15 * time.Second}
+var tokenHTTPClient = &http.Client{
+	Timeout: 15 * time.Second,
+	CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	},
+}
 
 type TokenResultSet struct {
 	AccessToken   string `json:"access_token"`
@@ -101,7 +107,7 @@ func FormPost(tokenEndpoint string, clientId string, clientSecret string, formDa
 		request.SetBasicAuth(clientId, clientSecret)
 	}
 
-	response, responseErr := oidcHTTPClient.Do(request)
+	response, responseErr := tokenHTTPClient.Do(request)
 
 	if responseErr != nil {
 		return fmt.Errorf("post token request: %w", responseErr)
