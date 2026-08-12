@@ -75,19 +75,19 @@ func PrintJson(tokenSet oidc.TokenResultSet) {
 }
 
 func Refresh(database *db.CredentialStore, clientName string, tokenSet oidc.TokenResultSet) (oidc.TokenResultSet, error) {
+	if tokenSet.RefreshToken == "" {
+		return tokenSet, fmt.Errorf("no refresh token is present in the saved credentials")
+	}
+
 	allClients, allClientsErr := database.GetClients()
 	if allClientsErr != nil {
-		log.Fatalln(allClientsErr)
+		return tokenSet, allClientsErr
 	}
 
 	clientConfig, err := database.GetClientWithSecret(allClients, clientName)
 
 	if err != nil {
 		return tokenSet, err
-	}
-
-	if tokenSet.RefreshToken == "" {
-		log.Fatalln("No refresh token is present in the saved credentials - unable to perform a refresh")
 	}
 
 	refreshResult, refreshErr := oidc.RefreshToken(clientConfig.Authority,
@@ -100,22 +100,26 @@ func Refresh(database *db.CredentialStore, clientName string, tokenSet oidc.Toke
 		return tokenSet, refreshErr
 	}
 
-	tokenSet.RefreshToken = refreshResult.RefreshToken
-	tokenSet.AccessToken = refreshResult.AccessToken
-	tokenSet.ExpiresIn = refreshResult.ExpiresIn
-	tokenSet.ExpiresAt = oidc.AbsoluteExpiry(time.Now(), refreshResult.ExpiresIn)
+	tokenSet = applyRefreshResult(tokenSet, refreshResult, time.Now())
 
-	_, saveErr := database.SaveTokens(clientName, oidc.TokenResultSet{
-		RefreshToken: refreshResult.RefreshToken,
-		AccessToken:  refreshResult.AccessToken,
-		ExpiresAt:    tokenSet.ExpiresAt,
-	})
+	_, saveErr := database.SaveTokens(clientName, tokenSet)
 
 	if saveErr != nil {
 		return tokenSet, saveErr
 	}
 
 	return tokenSet, nil
+}
+
+func applyRefreshResult(tokenSet oidc.TokenResultSet, refreshResult oidc.RefreshResult, now time.Time) oidc.TokenResultSet {
+	if refreshResult.RefreshToken != "" {
+		tokenSet.RefreshToken = refreshResult.RefreshToken
+	}
+	tokenSet.AccessToken = refreshResult.AccessToken
+	tokenSet.TokenType = refreshResult.TokenType
+	tokenSet.ExpiresIn = refreshResult.ExpiresIn
+	tokenSet.ExpiresAt = oidc.AbsoluteExpiry(now, refreshResult.ExpiresIn)
+	return tokenSet
 }
 
 func CleanTokens(database *db.CredentialStore, clientName string) error {
