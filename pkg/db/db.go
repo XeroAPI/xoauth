@@ -23,7 +23,7 @@ type OidcClient struct {
 	Alias        string
 	GrantType    string
 	ClientId     string
-	ClientSecret string
+	ClientSecret string `json:"-"`
 	CreatedDate  time.Time
 	Scopes       []string
 }
@@ -63,7 +63,7 @@ func (store *CredentialStore) EnsureDbExists() error {
 
 func fileExists(filename string) bool {
 	info, err := os.Stat(filename)
-	if os.IsNotExist(err) {
+	if err != nil {
 		return false
 	}
 	return !info.IsDir()
@@ -170,9 +170,74 @@ func (store *CredentialStore) writeClients(clients map[string]OidcClient) error 
 		return pathErr
 	}
 
-	jsonData, _ := json.MarshalIndent(clients, "", "  ")
-	err := ioutil.WriteFile(fileName, jsonData, 0644)
-	return err
+	return writeClientsFile(fileName, clients)
+}
+
+func writeClientsFile(fileName string, clients map[string]OidcClient) error {
+	jsonData, marshalErr := json.MarshalIndent(clients, "", "  ")
+	if marshalErr != nil {
+		return marshalErr
+	}
+
+	directory := filepath.Dir(fileName)
+	temporary, tempErr := ioutil.TempFile(directory, ".xoauth-*.tmp")
+	if tempErr != nil {
+		return tempErr
+	}
+	temporaryName := temporary.Name()
+	defer func() {
+		_ = temporary.Close()
+		_ = os.Remove(temporaryName)
+	}()
+
+	if chmodErr := temporary.Chmod(0600); chmodErr != nil {
+		return chmodErr
+	}
+	if _, writeErr := temporary.Write(jsonData); writeErr != nil {
+		return writeErr
+	}
+	if syncErr := temporary.Sync(); syncErr != nil {
+		return syncErr
+	}
+	if closeErr := temporary.Close(); closeErr != nil {
+		return closeErr
+	}
+
+	return replaceConfigFile(temporaryName, fileName)
+}
+
+func replaceConfigFile(temporaryName string, fileName string) error {
+	if renameErr := os.Rename(temporaryName, fileName); renameErr == nil {
+		return nil
+	}
+
+	if _, statErr := os.Stat(fileName); statErr != nil {
+		return fmt.Errorf("replace config file: %v", statErr)
+	}
+
+	backup, backupErr := ioutil.TempFile(filepath.Dir(fileName), ".xoauth-backup-*.tmp")
+	if backupErr != nil {
+		return backupErr
+	}
+	backupName := backup.Name()
+	if closeErr := backup.Close(); closeErr != nil {
+		return closeErr
+	}
+	if removeErr := os.Remove(backupName); removeErr != nil {
+		return removeErr
+	}
+
+	if renameErr := os.Rename(fileName, backupName); renameErr != nil {
+		return renameErr
+	}
+	if renameErr := os.Rename(temporaryName, fileName); renameErr != nil {
+		if rollbackErr := os.Rename(backupName, fileName); rollbackErr != nil {
+			return fmt.Errorf("replace config file: %v; rollback failed: %v", renameErr, rollbackErr)
+		}
+		return renameErr
+	}
+
+	return os.Remove(backupName)
 }
 
 func (store *CredentialStore) SaveClientMetadata(client OidcClient) (bool, error) {
