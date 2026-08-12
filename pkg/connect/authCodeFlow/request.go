@@ -4,13 +4,35 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"time"
 
 	"github.com/XeroAPI/xoauth/pkg/db"
 	"github.com/XeroAPI/xoauth/pkg/interop"
 	"github.com/XeroAPI/xoauth/pkg/oidc"
 	"github.com/gookit/color"
 )
+
+const callbackPath = "/callback"
+
+func newLoopbackServer(port int, handler http.Handler) (*http.Server, net.Listener, error) {
+	listener, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	server := &http.Server{
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       30 * time.Second,
+		MaxHeaderBytes:    16 * 1024,
+	}
+
+	return server, listener, nil
+}
 
 type CodeFlowInteractor struct {
 	wellKnownConfig oidc.WellKnownConfiguration
@@ -65,13 +87,17 @@ func (interactor *CodeFlowInteractor) initRequest(client db.OidcClient, codeVeri
 	}
 
 	m := http.NewServeMux()
-	s := http.Server{Addr: fmt.Sprintf(":%d", localHostPort), Handler: m}
 	ctx, cancel := context.WithCancel(context.Background())
 
 	defer cancel()
 
 	// Open a web server to receive the redirect
-	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	m.HandleFunc(callbackPath, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		interactor.handleOidcCallback(w, r,
 			client.Alias,
 			client.ClientId,
@@ -83,29 +109,40 @@ func (interactor *CodeFlowInteractor) initRequest(client db.OidcClient, codeVeri
 		)
 	})
 
+	s, listener, listenErr := newLoopbackServer(localHostPort, m)
+	if listenErr != nil {
+		log.Fatalf("failed to listen for OIDC callback: %v", listenErr)
+	}
+
+	serverErrors := make(chan error, 1)
+	go func() {
+		if err := s.Serve(listener); err != nil && err != http.ErrServerClosed {
+			serverErrors <- err
+		}
+	}()
+
 	log.Printf("%s", color.FgYellow.Sprintf("Opening browser window"))
 
 	openErr := interop.OpenBrowser(interactor.operatingSystem, authorisationUrl)
 
 	if openErr != nil {
+		_ = s.Close()
 		log.Fatalf("failed to open browser window %v", openErr)
 	}
-
-	go func() {
-		if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatal(err)
-		}
-	}()
 
 	select {
 	case <-ctx.Done():
 		// Shutdown the server when the context is canceled
-		err := s.Shutdown(ctx)
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		err := s.Shutdown(shutdownCtx)
 
-		if err != nil && err != context.Canceled {
+		if err != nil {
 			log.Fatalln(err)
 		} else {
 			log.Println("")
 		}
+	case err := <-serverErrors:
+		log.Fatalf("OIDC callback server failed: %v", err)
 	}
 }
