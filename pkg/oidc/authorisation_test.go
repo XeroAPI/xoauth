@@ -62,6 +62,7 @@ func TestFormPostRejectsUnsafeTokenEndpointErrorCodes(t *testing.T) {
 	}{
 		{name: "control characters", errorCode: "invalid_grant\r\nrefresh-token-secret"},
 		{name: "quoted secret echo", errorCode: `invalid_grant\"refresh-token-secret`},
+		{name: "short secret-like value", errorCode: "refresh-token-secret"},
 		{name: "overlong value", errorCode: strings.Repeat("refresh-token-secret", 4)},
 	}
 

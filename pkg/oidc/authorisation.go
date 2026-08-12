@@ -14,7 +14,17 @@ import (
 )
 
 const maxOIDCResponseBytes = 1024 * 1024
-const maxOAuthErrorCodeBytes = 64
+
+var standardTokenEndpointErrors = map[string]bool{
+	"invalid_request":         true,
+	"invalid_client":          true,
+	"invalid_grant":           true,
+	"unauthorized_client":     true,
+	"unsupported_grant_type":  true,
+	"invalid_scope":           true,
+	"invalid_target":          true,
+	"temporarily_unavailable": true,
+}
 
 var oidcHTTPClient = &http.Client{Timeout: 15 * time.Second}
 var tokenHTTPClient = &http.Client{
@@ -141,21 +151,7 @@ func FormPost(tokenEndpoint string, clientId string, clientSecret string, formDa
 }
 
 func safeOAuthErrorCode(value string) bool {
-	if len(value) == 0 || len(value) > maxOAuthErrorCodeBytes {
-		return false
-	}
-	for index := 0; index < len(value); index++ {
-		if !isOAuthNQSChar(value[index]) {
-			return false
-		}
-	}
-	return true
-}
-
-func isOAuthNQSChar(character byte) bool {
-	return character == 0x20 || character == 0x21 ||
-		(character >= 0x23 && character <= 0x5b) ||
-		(character >= 0x5d && character <= 0x7e)
+	return standardTokenEndpointErrors[value]
 }
 
 func ExchangeCodeForToken(tokenEndpoint string, code string, clientId string, clientSecret string, codeVerifier string, redirectUri string) (TokenResultSet, error) {
