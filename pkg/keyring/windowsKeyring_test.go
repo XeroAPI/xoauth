@@ -53,6 +53,33 @@ func TestWindowsGetTokensAllowsMissingOptionalTokens(t *testing.T) {
 	}
 }
 
+// TestWindowsGetTokensReadsARefreshTokenWithoutAnIdentityToken covers the state
+// that made the previous implementation call err.Error() on a nil error: the
+// optional identity read fails with ErrNotFound and the optional refresh read
+// then succeeds, clearing err.
+func TestWindowsGetTokensReadsARefreshTokenWithoutAnIdentityToken(t *testing.T) {
+	values := map[string]string{
+		"client.refresh": "refresh-token",
+		"client.access":  "access-token",
+		"client.expiry":  "1700000000",
+	}
+	withFakeWindowsKeyring(t, values)
+
+	result, err := (WindowsKeyRingService{}).GetTokens("client")
+	if err != nil {
+		t.Fatalf("GetTokens() error = %v", err)
+	}
+	if result.RefreshToken != "refresh-token" {
+		t.Fatalf("GetTokens() refresh token = %q, want %q", result.RefreshToken, "refresh-token")
+	}
+	if result.IdentityToken != "" {
+		t.Fatalf("GetTokens() identity token = %q, want empty", result.IdentityToken)
+	}
+	if result.AccessToken != "access-token" || result.ExpiresAt != 1700000000 {
+		t.Fatalf("GetTokens() = %#v, want the access token and expiry", result)
+	}
+}
+
 func TestWindowsGetTokensPropagatesOptionalReadFailure(t *testing.T) {
 	withFakeWindowsKeyring(t, map[string]string{})
 	wantErr := errors.New("credential store unavailable")
@@ -84,12 +111,37 @@ func TestWindowsSetTokensReturnsExpiryWriteFailure(t *testing.T) {
 }
 
 func TestWindowsDeleteTokensAttemptsEveryCredential(t *testing.T) {
-	withFakeWindowsKeyring(t, map[string]string{
+	values := map[string]string{
 		"client.identity": "identity-token",
 		"client.access":   "access-token",
-	})
+	}
+	withFakeWindowsKeyring(t, values)
+
+	// client.refresh is absent, so the store reports ErrNotFound part way through
+	// the sweep. Record every name the implementation asks for: stopping at the
+	// first ErrNotFound would leave client.access behind.
+	var attempted []string
+	storeDelete := windowsKeyringDelete
+	windowsKeyringDelete = func(service, item string) error {
+		attempted = append(attempted, item)
+		return storeDelete(service, item)
+	}
 
 	if err := (WindowsKeyRingService{}).DeleteTokens("client"); err != nil {
 		t.Fatalf("DeleteTokens() error = %v", err)
+	}
+
+	want := []string{"client.identity", "client.refresh", "client.access", "client.expiry"}
+	if len(attempted) != len(want) {
+		t.Fatalf("DeleteTokens() attempted %v, want %v", attempted, want)
+	}
+	for index, item := range want {
+		if attempted[index] != item {
+			t.Fatalf("DeleteTokens() attempted %v, want %v", attempted, want)
+		}
+	}
+
+	if len(values) != 0 {
+		t.Fatalf("DeleteTokens() left %v in the credential store, want every credential removed", values)
 	}
 }
