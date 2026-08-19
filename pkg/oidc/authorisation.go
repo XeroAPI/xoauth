@@ -12,6 +12,10 @@ import (
 	"time"
 )
 
+const maxOIDCResponseBytes = 1024 * 1024
+
+var oidcHTTPClient = &http.Client{Timeout: 15 * time.Second}
+
 type TokenResultSet struct {
 	AccessToken   string `json:"access_token"`
 	IdentityToken string `json:"id_token"`
