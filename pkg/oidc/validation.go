@@ -109,9 +109,23 @@ func validateToken(tokenString string, configuration WellKnownConfiguration, exp
 	}
 
 	if expectedAudience != "" {
-		// jwt-go validates an audience only when the claim is present. An OIDC
-		// ID token must include an audience, so reject tokens that omit it.
-		if audience, ok := claims["aud"]; !ok || audience == nil {
+		// jwt-go validates a time claim only when it is present, so an ID token
+		// without an expiry never expires. OIDC Core requires the claim, so
+		// reject tokens that omit it or that set it to null.
+		if expiry, ok := claims["exp"]; !ok || expiry == nil {
+			return nil, errors.New("the JWT did not include an expiry claim")
+		}
+
+		// jwt-go validates an audience only when the claim is present and not
+		// empty. An OIDC ID token must include an audience, so reject tokens
+		// that omit it as well as tokens carrying an empty audience list.
+		audience, audienceErr := jwt.ParseClaimStrings(claims["aud"])
+
+		if audienceErr != nil {
+			return nil, errors.New("the JWT included an invalid audience claim")
+		}
+
+		if len(audience) == 0 {
 			return nil, errors.New("the JWT did not include an audience claim")
 		}
 
