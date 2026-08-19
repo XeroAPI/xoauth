@@ -15,10 +15,16 @@ jobs:
     timeout-minutes: 10
     strategy:
       fail-fast: false
+      # The floor is 1.20.x rather than the `go 1.15` directive master still
+      # declares, so 1.15 through 1.19 are not built here. It matches the
+      # `go 1.20` directive that agent/update-go-dependencies sets, which
+      # golang.org/x/crypto v0.31.0 requires. A newer toolchain builds the older
+      # module, so nothing breaks if this merges first; the gap closes when that
+      # branch lands.
       matrix:
         include:
           - os: ubuntu-latest
-            go: 1.18.x
+            go: 1.20.x
           - os: ubuntu-latest
             go: 1.26.x
           - os: windows-latest
@@ -32,6 +38,22 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
           cache: true
+
+      # Without this guard the Test step below can only ever fail on a compile
+      # error. The repository carried no *_test.go files when this workflow was
+      # written, so breaking pkg/oidc/refresh.go still printed "no test files"
+      # for every package and exited 0. The first tests arrive on the branches
+      # this one pairs with, starting with agent/fix-windows-keyring.
+      - name: Require discoverable tests
+        shell: bash
+        run: |
+          packages="$(go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./...)"
+          if [ -z "${packages}" ]; then
+            echo "::error::go list found no package with test files, so the Test step cannot fail on a regression."
+            exit 1
+          fi
+          echo "Packages with tests:"
+          echo "${packages}"
 
       - name: Test
         run: go test ./...
