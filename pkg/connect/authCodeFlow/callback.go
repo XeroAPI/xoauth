@@ -3,6 +3,7 @@ package authCodeFlow
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"log"
@@ -60,6 +61,15 @@ func (interactor *CodeFlowInteractor) handleOidcCallback(
 	var authorisationResponse, err = oidc.ValidateAuthorisationResponse(r.URL, state)
 
 	if err != nil {
+		if errors.Is(err, oidc.ErrStateMismatch) {
+			// The loopback port is fixed and documented, so any page the user
+			// visits can aim a request at it. Refuse the foreign callback but
+			// leave the login that is still in flight running.
+			log.Print("Ignored an OIDC callback with an unexpected state parameter")
+			http.Error(w, "Unexpected state parameter.", http.StatusBadRequest)
+			return
+		}
+
 		renderAndLogError(w, cancel, fmt.Sprintf("%v", err))
 		return
 	}
@@ -75,11 +85,24 @@ func (interactor *CodeFlowInteractor) handleOidcCallback(
 
 	log.Println("Validating token")
 
-	var _, validateErr = oidc.ValidateToken(result.IdentityToken, interactor.wellKnownConfig, clientId)
+	var claims, validateErr = oidc.ValidateToken(result.IdentityToken, interactor.wellKnownConfig, clientId)
 
 	if validateErr != nil {
 		renderAndLogError(w, cancel, fmt.Sprintf("%v", validateErr))
 		return
+	}
+
+	// The browser result page no longer renders credentials, so report the
+	// decoded ID token claims on the terminal rather than dropping them. They go
+	// to the log stream so that stdout stays a single JSON document for piping.
+	if claimsJson, claimsErr := json.MarshalIndent(claims, "", "    "); claimsErr != nil {
+		log.Printf("%s: %v",
+			color.Yellow.Sprintf("failed to render ID token claims"),
+			claimsErr,
+		)
+	} else {
+		log.Print("ID token claims:")
+		log.Print(string(claimsJson))
 	}
 
 	log.Print("Storing tokens in local keychain")
@@ -119,8 +142,11 @@ func (interactor *CodeFlowInteractor) handleOidcCallback(
 		Stored:    tokensStored,
 	}
 	if tplErr := t.Execute(w, viewModel); tplErr != nil {
-		renderAndLogError(w, cancel, fmt.Sprintf("%v", tplErr))
-		return
+		// The tokens are already stored and printed, so this is a delivery
+		// problem rather than an authentication failure. Reporting it through
+		// renderAndLogError would also write a second header over the 200 that
+		// the template has already committed.
+		log.Printf("failed to deliver the browser result page: %s", sanitiseCallbackError(fmt.Sprintf("%v", tplErr)))
 	}
 
 	cancel()

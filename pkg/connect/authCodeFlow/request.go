@@ -17,21 +17,48 @@ import (
 const callbackPath = "/callback"
 
 func newLoopbackServer(port int, handler http.Handler) (*http.Server, net.Listener, error) {
-	listener, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
+	// RFC 8252 section 8.3 marks binding by the name "localhost" NOT RECOMMENDED:
+	// a resolver that maps it to a routable address makes the callback listener
+	// reachable off-host. Bind the loopback IP literal instead.
+	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
 		return nil, nil, err
 	}
 
+	// The server carries no write deadline. Go arms WriteTimeout when the
+	// request header is read, and the callback handler performs the token
+	// exchange and the JWKS fetch before it can render anything, so a deadline
+	// here fails the success page after the tokens have already been stored. The
+	// read side plus IdleTimeout still bound a slow client, and the server is
+	// shut down as soon as the flow finishes.
 	server := &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      15 * time.Second,
+		WriteTimeout:      0,
 		IdleTimeout:       30 * time.Second,
 		MaxHeaderBytes:    16 * 1024,
 	}
 
 	return server, listener, nil
+}
+
+// newCallbackMux routes only the exact callback path and only GET requests to
+// the callback handler.
+func newCallbackMux(handleCallback http.HandlerFunc) *http.ServeMux {
+	m := http.NewServeMux()
+
+	m.HandleFunc(callbackPath, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		handleCallback(w, r)
+	})
+
+	return m
 }
 
 type CodeFlowInteractor struct {
@@ -86,18 +113,12 @@ func (interactor *CodeFlowInteractor) initRequest(client db.OidcClient, codeVeri
 		return
 	}
 
-	m := http.NewServeMux()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	defer cancel()
 
 	// Open a web server to receive the redirect
-	m.HandleFunc(callbackPath, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			w.Header().Set("Allow", http.MethodGet)
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
+	m := newCallbackMux(func(w http.ResponseWriter, r *http.Request) {
 		interactor.handleOidcCallback(w, r,
 			client.Alias,
 			client.ClientId,

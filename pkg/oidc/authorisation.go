@@ -1,6 +1,7 @@
 package oidc
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -60,14 +61,20 @@ type AuthorisationResponse struct {
 	State string
 }
 
+// ErrStateMismatch reports a callback whose state parameter does not belong to
+// the pending authorisation request. The loopback port is fixed and documented,
+// so any page the user visits can provoke one; callers must reject the request
+// without abandoning the login that is still in flight.
+var ErrStateMismatch = errors.New(`oidc Error: state parameters don't match`)
+
 func ValidateAuthorisationResponse(url *url.URL, state string) (AuthorisationResponse, error) {
 	var response AuthorisationResponse
 	var query = url.Query()
 	var code = query.Get("code")
 	var stateFromQuery = query.Get("state")
 
-	if stateFromQuery != state {
-		return response, errors.New(`oidc Error: state parameters don't match`)
+	if subtle.ConstantTimeCompare([]byte(stateFromQuery), []byte(state)) != 1 {
+		return response, ErrStateMismatch
 	}
 
 	if code == "" {
