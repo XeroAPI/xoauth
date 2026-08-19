@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -147,11 +148,65 @@ func TestWriteClientsFileReplacesExistingConfigWithoutSecrets(t *testing.T) {
 		t.Fatalf("config did not contain client metadata: %s", data)
 	}
 
+	// os.Chmod on Windows only toggles the read-only bit, so the permission bits
+	// are only meaningful on POSIX systems. The config is seeded world readable,
+	// so an in-place write would leave those bits set.
+	if runtime.GOOS != "windows" {
+		info, statErr := os.Stat(fileName)
+		if statErr != nil {
+			t.Fatalf("stat config: %v", statErr)
+		}
+		if mode := info.Mode().Perm(); mode != 0600 {
+			t.Fatalf("config file mode = %#o, want %#o", mode, 0600)
+		}
+	}
+
 	temporaryFiles, err := filepath.Glob(filepath.Join(directory, ".xoauth-*.tmp"))
 	if err != nil {
 		t.Fatalf("glob temporary files: %v", err)
 	}
 	if len(temporaryFiles) != 0 {
 		t.Fatalf("temporary files remain after replacement: %v", temporaryFiles)
+	}
+}
+
+func TestReplaceConfigFileRemovesBackupAfterFallbackInstall(t *testing.T) {
+	directory, err := ioutil.TempDir("", "xoauth-db-fallback-")
+	if err != nil {
+		t.Fatalf("create temporary directory: %v", err)
+	}
+	defer os.RemoveAll(directory)
+
+	fileName := filepath.Join(directory, ConfigFileName)
+	temporaryName := filepath.Join(directory, "new.tmp")
+	if err := ioutil.WriteFile(fileName, []byte("old"), 0600); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+	if err := ioutil.WriteFile(temporaryName, []byte("new"), 0600); err != nil {
+		t.Fatalf("seed temporary config: %v", err)
+	}
+
+	previousRename := renameFile
+	calls := 0
+	renameFile = func(oldPath, newPath string) error {
+		calls++
+		// Fail only the direct install so the backup fallback runs to completion.
+		if calls == 1 {
+			return errors.New("injected rename failure")
+		}
+		return os.Rename(oldPath, newPath)
+	}
+	defer func() { renameFile = previousRename }()
+
+	if err := replaceConfigFile(temporaryName, fileName); err != nil {
+		t.Fatalf("replaceConfigFile() error = %v", err)
+	}
+
+	data, err := ioutil.ReadFile(fileName)
+	if err != nil || string(data) != "new" {
+		t.Fatalf("config after fallback install = %q, %v; want the new content", data, err)
+	}
+	if _, err := os.Stat(configBackupName(fileName)); !os.IsNotExist(err) {
+		t.Fatalf("stale backup remains after a successful fallback install: %v", err)
 	}
 }

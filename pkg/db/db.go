@@ -18,6 +18,10 @@ import (
 const ConfigDirPath = ".xoauth"
 const ConfigFileName = "xoauth.json"
 
+const configLockTimeout = 5 * time.Second
+const configLockPollInterval = 20 * time.Millisecond
+const configLockStaleAfter = 60 * time.Second
+
 var statFile = os.Stat
 var renameFile = os.Rename
 var removeFile = os.Remove
@@ -260,7 +264,18 @@ func replaceConfigFile(temporaryName string, fileName string) error {
 		return renameErr
 	}
 
-	return removeFile(backupName)
+	// The new config is installed. A backup that cannot be removed, because it is
+	// locked or read-only, is stale rather than a failed write, and reporting it
+	// as one aborts SaveClientWithSecret before the secret reaches the keyring.
+	removeBackupFile(backupName)
+
+	return nil
+}
+
+func removeBackupFile(backupName string) {
+	if removeErr := removeFile(backupName); removeErr != nil {
+		log.Printf("could not remove the stale config backup %s: %v", backupName, removeErr)
+	}
 }
 
 func configBackupName(fileName string) string {
@@ -278,16 +293,81 @@ func recoverConfigFile(fileName string) error {
 		return backupErr
 	}
 
+	// The config itself is intact, so a backup that cannot be removed is stale
+	// rather than fatal. Failing here would brick list, connect and doctor over
+	// one undeletable xoauth.json.backup.
 	if targetExists && backupExists {
-		return removeFile(backupName)
+		removeBackupFile(backupName)
+		return nil
 	}
+	// The config is missing, so the backup is the only copy left and a failed
+	// restore genuinely has nothing to fall back to.
 	if !targetExists && backupExists {
 		return renameFile(backupName, fileName)
 	}
 	return nil
 }
 
+func configLockName(fileName string) string {
+	return fileName + ".lock"
+}
+
+// lockConfig takes an exclusive advisory lock over the config file. GetClients
+// followed by writeClients is a read-modify-write, so without a lock two
+// concurrent invocations lose one client while its secret stays orphaned in the
+// keyring. os.O_CREATE|os.O_EXCL is the portable primitive available here, and a
+// lock left behind by a killed process is reclaimed once it is stale.
+func lockConfig(fileName string) (func(), error) {
+	if pathErr := ensurePathExists(filepath.Dir(fileName)); pathErr != nil {
+		return nil, pathErr
+	}
+
+	lockName := configLockName(fileName)
+	deadline := time.Now().Add(configLockTimeout)
+
+	for {
+		lock, openErr := os.OpenFile(lockName, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+
+		if openErr == nil {
+			if closeErr := lock.Close(); closeErr != nil {
+				_ = removeFile(lockName)
+				return nil, closeErr
+			}
+
+			return func() {
+				if removeErr := removeFile(lockName); removeErr != nil {
+					log.Printf("could not release the config lock %s: %v", lockName, removeErr)
+				}
+			}, nil
+		}
+
+		if !os.IsExist(openErr) {
+			return nil, fmt.Errorf("lock config file: %v", openErr)
+		}
+
+		if info, statErr := statFile(lockName); statErr == nil && time.Since(info.ModTime()) > configLockStaleAfter {
+			if removeErr := removeFile(lockName); removeErr != nil {
+				return nil, fmt.Errorf("lock config file: %v", removeErr)
+			}
+			continue
+		}
+
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("timed out waiting for the config lock %s", lockName)
+		}
+
+		time.Sleep(configLockPollInterval)
+	}
+}
+
 func (store *CredentialStore) SaveClientMetadata(client OidcClient) (bool, error) {
+	unlock, lockErr := lockConfig(store.getDbFile())
+
+	if lockErr != nil {
+		return false, lockErr
+	}
+	defer unlock()
+
 	clients, readErr := store.GetClients()
 
 	if readErr != nil {
@@ -347,6 +427,13 @@ func (store *CredentialStore) SaveClientWithSecret(client OidcClient, secret str
 }
 
 func (store *CredentialStore) DeleteClient(clientName string) (bool, error) {
+	unlock, lockErr := lockConfig(store.getDbFile())
+
+	if lockErr != nil {
+		return false, lockErr
+	}
+	defer unlock()
+
 	clients, clientsErr := store.GetClients()
 
 	if clientsErr != nil {
