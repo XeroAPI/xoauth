@@ -74,7 +74,20 @@ func PrintJson(tokenSet oidc.TokenResultSet) {
 	fmt.Fprintf(os.Stdout, "%s", tokenSerialised)
 }
 
-func Refresh(database *db.CredentialStore, clientName string, tokenSet oidc.TokenResultSet) (oidc.TokenResultSet, error) {
+// refreshStore is the narrow view of the credential store that Refresh needs.
+// Taking an interface rather than the concrete *db.CredentialStore lets a fake
+// observe the merged token set that is handed to SaveTokens.
+type refreshStore interface {
+	GetClients() (map[string]db.OidcClient, error)
+	GetClientWithSecret(allClients map[string]db.OidcClient, name string) (db.OidcClient, error)
+	SaveTokens(clientName string, tokenSet oidc.TokenResultSet) (bool, error)
+}
+
+// refreshToken is a seam so that the persistence path can be exercised without
+// a live token endpoint, matching the function variables used in pkg/keyring.
+var refreshToken = oidc.RefreshToken
+
+func Refresh(database refreshStore, clientName string, tokenSet oidc.TokenResultSet) (oidc.TokenResultSet, error) {
 	if tokenSet.RefreshToken == "" {
 		return tokenSet, fmt.Errorf("no refresh token is present in the saved credentials")
 	}
@@ -90,7 +103,7 @@ func Refresh(database *db.CredentialStore, clientName string, tokenSet oidc.Toke
 		return tokenSet, err
 	}
 
-	refreshResult, refreshErr := oidc.RefreshToken(clientConfig.Authority,
+	refreshResult, refreshErr := refreshToken(clientConfig.Authority,
 		clientConfig.ClientId,
 		clientConfig.ClientSecret,
 		tokenSet.RefreshToken,
